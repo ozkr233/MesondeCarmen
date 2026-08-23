@@ -1,26 +1,80 @@
 @import "tailwindcss";
 
-:root {
-  --background: #ffffff;
-  --foreground: #171717;
+/* Paleta y tipografías heredadas del diseño original de El Mesón de Carmen. */
+@theme {
+  --color-primary: #b8442c;
+  --color-primary-dark: #97321e;
+  --color-secondary: #e0a800;
+  --color-dark: #1f140e;
+  --color-light: #fdf8f2;
+  --color-whatsapp: #25d366;
+  --color-whatsapp-dark: #128c7e;
 }
 
 @theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
-}
-
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
+  --font-sans: var(--font-montserrat), ui-sans-serif, system-ui, sans-serif;
+  --font-display: var(--font-playfair), Georgia, "Times New Roman", serif;
 }
 
 body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  background-color: var(--color-light);
+  color: var(--color-dark);
+}
+
+h1,
+h2,
+h3 {
+  font-family: var(--font-display);
+}
+
+/* --- Botón de WhatsApp -------------------------------------------------- */
+.btn-wa {
+  background-color: var(--color-whatsapp);
+  color: #fff;
+  font-weight: 800;
+  transition: all 0.3s ease;
+  box-shadow: 0 4px 15px rgb(37 211 102 / 0.4);
+}
+.btn-wa:hover {
+  background-color: var(--color-whatsapp-dark);
+  transform: translateY(-2px);
+}
+
+/* --- Tarjeta de plato --------------------------------------------------- */
+.menu-card {
+  transition:
+    transform 0.3s ease,
+    box-shadow 0.3s ease;
+}
+.menu-card:hover {
+  transform: translateY(-5px);
+  box-shadow:
+    0 20px 25px -5px rgb(0 0 0 / 0.1),
+    0 10px 10px -5px rgb(0 0 0 / 0.04);
+}
+
+/* --- Latido del botón flotante ------------------------------------------ */
+@keyframes wa-pulse {
+  0% {
+    box-shadow: 0 0 0 0 rgb(37 211 102 / 0.5);
+  }
+  70% {
+    box-shadow: 0 0 0 15px rgb(37 211 102 / 0);
+  }
+  100% {
+    box-shadow: 0 0 0 0 rgb(37 211 102 / 0);
+  }
+}
+.animate-wa-pulse {
+  animation: wa-pulse 2s infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .animate-wa-pulse {
+    animation: none;
+  }
+  .menu-card:hover,
+  .btn-wa:hover {
+    transform: none;
+  }
 }

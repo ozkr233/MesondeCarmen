@@ -1,36 +1,90 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# El Mesón de Carmen
 
-## Getting Started
+Aplicación de pedidos para el restaurante **El Mesón de Carmen** (Riohacha, La Guajira).
+Catálogo dinámico, carrito de compras con checkout por WhatsApp y panel de
+administración con subida de fotos.
 
-First, run the development server:
+Next.js 16 (App Router) · React 19 · Tailwind CSS 4 · Supabase (Postgres, Storage y Auth) · Zustand
+
+---
+
+## Puesta en marcha
+
+### 1. Crear el proyecto en Supabase
+
+En [supabase.com](https://supabase.com) crea un proyecto y luego, en
+**SQL Editor → New query**, pega y ejecuta el contenido de
+[`supabase/schema.sql`](supabase/schema.sql). Eso crea:
+
+- la tabla `dishes` con sus índices,
+- las políticas RLS (lectura pública, escritura solo autenticados),
+- el bucket público `menu-images` con sus políticas,
+- los tres platos de ejemplo.
+
+### 2. Crear el usuario administrador
+
+**Authentication → Users → Add user**. Marca *Auto Confirm User* para poder
+entrar de inmediato. Ese correo y contraseña son los del panel `/admin`.
+
+### 3. Configurar las variables de entorno
 
 ```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
+cp .env.example .env.local
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+Rellena en `.env.local`:
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+| Variable | Dónde encontrarla |
+| --- | --- |
+| `NEXT_PUBLIC_SUPABASE_URL` | Project Settings → Data API → Project URL |
+| `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY` | Project Settings → API Keys → Publishable key (`sb_publishable_…`). Si tu proyecto todavía muestra la llave `anon`, sirve igual. |
+| `NEXT_PUBLIC_WHATSAPP_NUMBER` | Número del restaurante, sin `+` ni espacios |
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+### 4. Arrancar
 
-## Learn More
+```bash
+npm install
+npm run dev
+```
 
-To learn more about Next.js, take a look at the following resources:
+- Sitio público: <http://localhost:3000>
+- Panel: <http://localhost:3000/admin>
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+---
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+## Estructura
 
-## Deploy on Vercel
+```
+app/
+  page.tsx                 Landing + carta (Server Component)
+  admin/login/page.tsx     Login contra Supabase Auth
+  admin/(panel)/           Dashboard CRUD (protegido)
+  admin/actions.ts         Server Actions: crear, editar, borrar, salir
+components/
+  site/                    Hero, WhyUs, Ubicación, Footer, botones flotantes
+  menu/                    Carta agrupada por categoría y tarjeta de plato
+  cart/                    Carrito lateral y formulario de checkout
+  admin/                   Tabla y formulario de platos
+  ui/                      Button, Input, Card, Modal
+utils/supabase/            Clientes browser / server / proxy
+store/cart.ts              Carrito (Zustand + localStorage)
+lib/                       Formato de precios, mensajes de WhatsApp, datos del negocio
+proxy.ts                   Protege /admin y refresca la sesión
+supabase/schema.sql        SQL para ejecutar en el panel de Supabase
+Placeholder.html           Diseño original, conservado como referencia
+```
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+## Notas técnicas
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+- **`proxy.ts`, no `middleware.ts`**: Next 16 deprecó el nombre `middleware`.
+  Misma función, runtime Node.js.
+- **Datos del negocio** (dirección, horarios, mapa, foto de portada) están en
+  [`lib/site.ts`](lib/site.ts), no repartidos por los componentes.
+- **Las fotos se suben desde el navegador** al bucket `menu-images`: el cuerpo
+  de una Server Action está limitado a ~1 MB y una foto de plato lo supera.
+  Solo la URL pública viaja a la Server Action.
+- **La seguridad real es RLS.** El proxy redirige, pero cada Server Action
+  revalida la sesión por su cuenta porque el matcher del proxy no cubre de
+  forma fiable las Server Actions.
+- Las imágenes de ejemplo del seed apuntan a un CDN externo con enlaces
+  temporales. Súbelas de nuevo desde `/admin` para tener las tuyas propias.
