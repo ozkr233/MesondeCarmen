@@ -1,7 +1,15 @@
 -- ============================================================================
---  El Mesón de Carmen — Esquema de base de datos
+--  El Mesón de Carmen — Esquema completo de base de datos
 --  Ejecutar completo en:  Supabase Dashboard → SQL Editor → New query → Run
 --  Es idempotente: puedes volver a ejecutarlo sin romper nada.
+--
+--  Este archivo instala TODO desde cero (platos, ajustes, pedidos, storage).
+--  Si tu proyecto de Supabase ya estaba creado con una versión anterior, corre
+--  en su lugar las migraciones incrementales 02_carta_y_envio.sql y
+--  03_pedidos.sql, que solo aplican lo que falta.
+--
+--  Los platos que siembra al final son de EJEMPLO. Para cargar la carta real
+--  del restaurante, ejecuta después 04_carta_completa.sql.
 -- ============================================================================
 
 
@@ -16,11 +24,22 @@ create table if not exists public.dishes (
   category     text          not null default 'General',
   image_url    text,
   is_available boolean       not null default true,
+  is_featured  boolean       not null default false,
   created_at   timestamptz   not null default now()
 );
 
+-- `add column if not exists` para las bases que se crearon antes de que
+-- existieran los destacados.
+alter table public.dishes
+  add column if not exists is_featured boolean not null default false;
+
 create index if not exists dishes_category_idx     on public.dishes (category);
 create index if not exists dishes_is_available_idx on public.dishes (is_available);
+
+-- Índice parcial: solo interesan las filas destacadas, que son un puñado.
+create index if not exists dishes_is_featured_idx
+  on public.dishes (is_featured)
+  where is_featured;
 
 
 -- ----------------------------------------------------------------------------
@@ -60,7 +79,179 @@ create policy "dishes_delete_authenticated"
 
 
 -- ----------------------------------------------------------------------------
--- 3. Bucket de Storage para las fotos de los platos
+-- 3. Ajustes del negocio (una sola fila)
+--    El check (id = 1) impide que se creen filas sueltas por error.
+-- ----------------------------------------------------------------------------
+create table if not exists public.settings (
+  id           smallint      primary key default 1 check (id = 1),
+  delivery_fee numeric(10,2) not null default 0,
+  updated_at   timestamptz   not null default now()
+);
+
+insert into public.settings (id) values (1)
+on conflict (id) do nothing;
+
+alter table public.settings enable row level security;
+
+drop policy if exists "settings_select_public"        on public.settings;
+drop policy if exists "settings_update_authenticated" on public.settings;
+
+create policy "settings_select_public"
+  on public.settings for select
+  to anon, authenticated
+  using (true);
+
+create policy "settings_update_authenticated"
+  on public.settings for update
+  to authenticated
+  using (true)
+  with check (true);
+
+
+-- ----------------------------------------------------------------------------
+-- 4. Pedidos
+--    `total` es una columna generada: no puede quedar descuadrada del subtotal.
+-- ----------------------------------------------------------------------------
+create table if not exists public.orders (
+  id               uuid          primary key default gen_random_uuid(),
+  code             text          not null,
+  customer_name    text          not null,
+  customer_phone   text          not null,
+  customer_address text          not null,
+  notes            text,
+  subtotal         numeric(12,2) not null default 0,
+  delivery_fee     numeric(12,2) not null default 0,
+  total            numeric(12,2) generated always as (subtotal + delivery_fee) stored,
+  status           text          not null default 'pendiente'
+                     check (status in ('pendiente','confirmado','entregado','cancelado')),
+  created_at       timestamptz   not null default now()
+);
+
+create index if not exists orders_created_at_idx on public.orders (created_at desc);
+create index if not exists orders_status_idx     on public.orders (status);
+create index if not exists orders_code_idx       on public.orders (code);
+
+
+-- ----------------------------------------------------------------------------
+-- 5. Guardas sobre orders
+--    La política de insert es pública (ver punto 7): cualquiera puede escribir
+--    contra PostgREST sin pasar por el formulario. Estos checks acotan el daño
+--    a filas con forma razonable; la validación de verdad vive en la Server
+--    Action `saveOrder`, que además recalcula los precios contra `dishes`.
+--    `drop` + `add` en vez de `if not exists`, que Postgres no soporta aquí.
+-- ----------------------------------------------------------------------------
+alter table public.orders drop constraint if exists orders_code_len;
+alter table public.orders drop constraint if exists orders_customer_name_len;
+alter table public.orders drop constraint if exists orders_customer_phone_len;
+alter table public.orders drop constraint if exists orders_customer_address_len;
+alter table public.orders drop constraint if exists orders_notes_len;
+alter table public.orders drop constraint if exists orders_subtotal_positive;
+alter table public.orders drop constraint if exists orders_delivery_fee_positive;
+
+alter table public.orders
+  add constraint orders_code_len
+    check (length(code) between 1 and 20),
+  add constraint orders_customer_name_len
+    check (length(btrim(customer_name)) between 1 and 120),
+  add constraint orders_customer_phone_len
+    check (length(btrim(customer_phone)) between 1 and 40),
+  add constraint orders_customer_address_len
+    check (length(btrim(customer_address)) between 1 and 300),
+  add constraint orders_notes_len
+    check (notes is null or length(notes) <= 500),
+  add constraint orders_subtotal_positive
+    check (subtotal >= 0),
+  add constraint orders_delivery_fee_positive
+    check (delivery_fee >= 0);
+
+
+-- ----------------------------------------------------------------------------
+-- 6. Líneas del pedido
+--    El nombre y el precio se guardan copiados: si mañana sube el precio o se
+--    borra el plato, el histórico tiene que seguir contando lo que se cobró.
+-- ----------------------------------------------------------------------------
+create table if not exists public.order_items (
+  id         uuid          primary key default gen_random_uuid(),
+  order_id   uuid          not null references public.orders (id) on delete cascade,
+  dish_id    uuid          references public.dishes (id) on delete set null,
+  name       text          not null,
+  unit_price numeric(10,2) not null default 0,
+  quantity   integer       not null default 1 check (quantity > 0)
+);
+
+create index if not exists order_items_order_id_idx on public.order_items (order_id);
+create index if not exists order_items_dish_id_idx  on public.order_items (dish_id);
+
+alter table public.order_items drop constraint if exists order_items_name_len;
+alter table public.order_items drop constraint if exists order_items_unit_price_positive;
+alter table public.order_items drop constraint if exists order_items_quantity_max;
+
+alter table public.order_items
+  add constraint order_items_name_len
+    check (length(btrim(name)) between 1 and 200),
+  add constraint order_items_unit_price_positive
+    check (unit_price >= 0),
+  add constraint order_items_quantity_max
+    check (quantity <= 99);
+
+
+-- ----------------------------------------------------------------------------
+-- 7. RLS sobre los pedidos
+--    Cualquier visitante puede CREAR un pedido (es un formulario público),
+--    pero LEERLOS es solo para el dueño: contienen nombre, teléfono y
+--    dirección de los clientes.
+-- ----------------------------------------------------------------------------
+alter table public.orders      enable row level security;
+alter table public.order_items enable row level security;
+
+drop policy if exists "orders_insert_public"         on public.orders;
+drop policy if exists "orders_select_authenticated"  on public.orders;
+drop policy if exists "orders_update_authenticated"  on public.orders;
+drop policy if exists "orders_delete_authenticated"  on public.orders;
+
+create policy "orders_insert_public"
+  on public.orders for insert
+  to anon, authenticated
+  with check (true);
+
+create policy "orders_select_authenticated"
+  on public.orders for select
+  to authenticated
+  using (true);
+
+create policy "orders_update_authenticated"
+  on public.orders for update
+  to authenticated
+  using (true)
+  with check (true);
+
+create policy "orders_delete_authenticated"
+  on public.orders for delete
+  to authenticated
+  using (true);
+
+drop policy if exists "order_items_insert_public"        on public.order_items;
+drop policy if exists "order_items_select_authenticated" on public.order_items;
+drop policy if exists "order_items_delete_authenticated" on public.order_items;
+
+create policy "order_items_insert_public"
+  on public.order_items for insert
+  to anon, authenticated
+  with check (true);
+
+create policy "order_items_select_authenticated"
+  on public.order_items for select
+  to authenticated
+  using (true);
+
+create policy "order_items_delete_authenticated"
+  on public.order_items for delete
+  to authenticated
+  using (true);
+
+
+-- ----------------------------------------------------------------------------
+-- 8. Bucket de Storage para las fotos de los platos
 -- ----------------------------------------------------------------------------
 insert into storage.buckets (id, name, public)
 values ('menu-images', 'menu-images', true)
@@ -68,7 +259,7 @@ on conflict (id) do nothing;
 
 
 -- ----------------------------------------------------------------------------
--- 4. RLS sobre las imágenes del bucket
+-- 9. RLS sobre las imágenes del bucket
 -- ----------------------------------------------------------------------------
 drop policy if exists "menu_images_select_public"        on storage.objects;
 drop policy if exists "menu_images_insert_authenticated" on storage.objects;
@@ -98,10 +289,10 @@ create policy "menu_images_delete_authenticated"
 
 
 -- ----------------------------------------------------------------------------
--- 5. Datos iniciales (solo si la tabla está vacía)
---    Los precios son de ejemplo: edítalos desde el panel /admin.
+-- 10. Platos destacados de la portada (solo si la tabla está vacía)
+--     Los precios y las fotos son de ejemplo: edítalos desde el panel /admin.
 -- ----------------------------------------------------------------------------
-insert into public.dishes (name, description, price, category, image_url, is_available)
+insert into public.dishes (name, description, price, category, image_url, is_available, is_featured)
 select *
 from (
   values
@@ -110,21 +301,42 @@ from (
       'Arroz colorado, lleno de sabor caribeño, preparado con camarones frescos y especias de la región. Ideal para compartir.',
       35000::numeric, 'Platos Fuertes',
       'https://z-cdn-media.chatglm.cn/files/618438aa-692a-41ff-aa52-46821d36a49d.jpeg?auth_key=1885199246-fe9d77de764141fabf8ae1c90e3e5f4a-0-0becbdcf641017680cd84cf9bf071961',
-      true
+      true, true
     ),
     (
       'Cerdo Guisado',
       'Cerdo cocinado a fuego lento en salsa tradicional, acompañado de arroz, patacón y ensalada. El sabor de la comida casera.',
       28000::numeric, 'Platos Fuertes',
       'https://z-cdn-media.chatglm.cn/files/30c2c83d-5f93-4ecb-9c01-7293b51113ab.jpeg?auth_key=1885199246-4bab8becbfbc4e2e8b5f89922da564bf-0-a622ca86799c86369ae175cf0eaa8b55',
-      true
+      true, true
     ),
     (
       'Pescado Frito',
       'Fresco del día, frito hasta quedar dorado y crujiente, con el toque ahumado de la leña. Acompañado de patacones.',
       32000::numeric, 'Platos Fuertes',
       'https://z-cdn-media.chatglm.cn/files/37be5711-877c-4a2c-abb2-5b2aa99f4bcb.jpeg?auth_key=1885199246-2b36e3d08de6479186887b4085aba50b-0-f79089dbac91562f4b023121000b1fc5',
-      true
+      true, true
     )
-) as seed(name, description, price, category, image_url, is_available)
+) as seed(name, description, price, category, image_url, is_available, is_featured)
 where not exists (select 1 from public.dishes);
+
+
+-- ----------------------------------------------------------------------------
+-- 11. Resto de la carta de ejemplo, para que no nazca con tres platos
+--     Cada uno se inserta únicamente si no existe ya un plato con ese nombre.
+-- ----------------------------------------------------------------------------
+insert into public.dishes (name, description, price, category)
+select seed.*
+from (
+  values
+    ('Empanadas de Carne',  'Tres empanadas crujientes recién fritas, con ají casero.',                     8000::numeric,  'Entradas'),
+    ('Patacón con Queso',   'Plátano verde aplastado y frito, cubierto con queso costeño.',                 9000::numeric,  'Entradas'),
+    ('Sancocho de Gallina', 'Sopa espesa de gallina criolla con yuca, plátano y ñame. Sirve para dos.',      30000::numeric, 'Sopas'),
+    ('Limonada de Panela',  'Limonada natural endulzada con panela, bien fría.',                            5000::numeric,  'Bebidas'),
+    ('Jugo de Corozo',      'Jugo natural de corozo, el sabor de la Guajira.',                              6000::numeric,  'Bebidas'),
+    ('Gaseosa Personal',    'Botella personal. Consulta los sabores disponibles.',                          4000::numeric,  'Bebidas'),
+    ('Arroz de Leche',      'Postre tradicional cremoso con canela.',                                       6000::numeric,  'Postres')
+) as seed(name, description, price, category)
+where not exists (
+  select 1 from public.dishes d where d.name = seed.name
+);

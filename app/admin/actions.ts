@@ -12,6 +12,7 @@ export type DishInput = {
   category: string;
   image_url: string | null;
   is_available: boolean;
+  is_featured: boolean;
 };
 
 export type ActionResult = { error: string | null };
@@ -46,11 +47,13 @@ function clean(input: DishInput) {
     category: input.category.trim(),
     image_url: input.image_url?.trim() || null,
     is_available: input.is_available,
+    is_featured: input.is_featured,
   };
 }
 
 function refresh() {
   revalidatePath("/");
+  revalidatePath("/carta");
   revalidatePath("/admin");
 }
 
@@ -93,6 +96,38 @@ export async function toggleAvailability(
     .from("dishes")
     .update({ is_available: isAvailable })
     .eq("id", id);
+  if (error) return { error: error.message };
+
+  refresh();
+  return { error: null };
+}
+
+export async function toggleFeatured(
+  id: string,
+  isFeatured: boolean,
+): Promise<ActionResult> {
+  const supabase = await requireSession();
+  const { error } = await supabase
+    .from("dishes")
+    .update({ is_featured: isFeatured })
+    .eq("id", id);
+  if (error) return { error: error.message };
+
+  refresh();
+  return { error: null };
+}
+
+/** Tarifa única de domicilio. Vive en la fila id = 1 de `settings`. */
+export async function updateDeliveryFee(fee: number): Promise<ActionResult> {
+  if (!Number.isFinite(fee) || fee < 0) {
+    return { error: "El costo de envío debe ser un número mayor o igual a cero." };
+  }
+
+  const supabase = await requireSession();
+  const { error } = await supabase
+    .from("settings")
+    .update({ delivery_fee: fee, updated_at: new Date().toISOString() })
+    .eq("id", 1);
   if (error) return { error: error.message };
 
   refresh();

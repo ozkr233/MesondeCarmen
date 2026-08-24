@@ -24,18 +24,27 @@ export const DEFAULT_GREETING =
 
 /**
  * Arma el pedido completo. WhatsApp interpreta *texto* como negrita.
+ *
+ * El `code` es el que devuelve `saveOrder` al guardar el pedido en Supabase.
+ * Es opcional a propósito: si la base falla, el mensaje sale igual (sin
+ * código) antes que perder la venta.
  */
 export function buildOrderMessage(
   items: CartItem[],
   customer: CustomerInfo,
+  deliveryFee = 0,
+  code?: string | null,
 ): string {
   const lines = items.map(
     (item) =>
       `• ${item.quantity} x ${item.name} — ${formatCOP(item.price * item.quantity)}`,
   );
 
+  const subtotal = sumItems(items);
+
   const parts = [
     "*NUEVO PEDIDO — El Mesón de Carmen*",
+    ...(code ? [`*Pedido #${code}*`] : []),
     "",
     `*Cliente:* ${customer.name}`,
     `*Teléfono:* ${customer.phone}`,
@@ -44,8 +53,14 @@ export function buildOrderMessage(
     "*Pedido:*",
     ...lines,
     "",
-    `*TOTAL: ${formatCOP(sumItems(items))}*`,
   ];
+
+  // Sin tarifa configurada no se manda una línea de "Domicilio: $0".
+  if (deliveryFee > 0) {
+    parts.push(`Subtotal: ${formatCOP(subtotal)}`);
+    parts.push(`Domicilio: ${formatCOP(deliveryFee)}`);
+  }
+  parts.push(`*TOTAL: ${formatCOP(subtotal + deliveryFee)}*`);
 
   if (customer.notes.trim()) {
     parts.push("", `*Notas:* ${customer.notes.trim()}`);
@@ -58,6 +73,8 @@ export function buildOrderMessage(
 export function buildOrderUrl(
   items: CartItem[],
   customer: CustomerInfo,
+  deliveryFee = 0,
+  code?: string | null,
 ): string {
-  return whatsappLink(buildOrderMessage(items, customer));
+  return whatsappLink(buildOrderMessage(items, customer, deliveryFee, code));
 }

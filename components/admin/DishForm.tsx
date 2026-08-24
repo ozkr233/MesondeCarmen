@@ -49,6 +49,7 @@ type FormState = {
   price: string;
   category: string;
   is_available: boolean;
+  is_featured: boolean;
 };
 
 function initialState(dish: Dish | null): FormState {
@@ -59,6 +60,7 @@ function initialState(dish: Dish | null): FormState {
         price: String(dish.price),
         category: dish.category,
         is_available: dish.is_available,
+        is_featured: dish.is_featured,
       }
     : {
         name: "",
@@ -66,6 +68,7 @@ function initialState(dish: Dish | null): FormState {
         price: "",
         category: "Platos Fuertes",
         is_available: true,
+        is_featured: false,
       };
 }
 
@@ -164,6 +167,7 @@ function DishFormBody({
         category: form.category,
         image_url: imageUrl,
         is_available: form.is_available,
+        is_featured: form.is_featured,
       };
 
       const result = dish
@@ -286,19 +290,35 @@ function DishFormBody({
         />
       </div>
 
-      <label className="flex cursor-pointer items-center gap-2.5">
-        <input
-          type="checkbox"
-          checked={form.is_available}
-          onChange={(event) =>
-            setForm({ ...form, is_available: event.target.checked })
-          }
-          className="h-4 w-4 accent-primary"
-        />
-        <span className="text-sm font-semibold text-dark/80">
-          Disponible en la carta
-        </span>
-      </label>
+      <div className="space-y-2.5">
+        <label className="flex cursor-pointer items-center gap-2.5">
+          <input
+            type="checkbox"
+            checked={form.is_available}
+            onChange={(event) =>
+              setForm({ ...form, is_available: event.target.checked })
+            }
+            className="h-4 w-4 accent-primary"
+          />
+          <span className="text-sm font-semibold text-dark/80">
+            Disponible en la carta
+          </span>
+        </label>
+
+        <label className="flex cursor-pointer items-center gap-2.5">
+          <input
+            type="checkbox"
+            checked={form.is_featured}
+            onChange={(event) =>
+              setForm({ ...form, is_featured: event.target.checked })
+            }
+            className="h-4 w-4 accent-secondary"
+          />
+          <span className="text-sm font-semibold text-dark/80">
+            Destacado en la portada
+          </span>
+        </label>
+      </div>
 
       {error && (
         <p className="flex items-start gap-2 rounded-lg bg-red-50 p-3 text-sm text-red-700">

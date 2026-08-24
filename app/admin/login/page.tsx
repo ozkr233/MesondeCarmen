@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Suspense, useState, type FormEvent } from "react";
 
+import { Logo } from "@/components/site/Logo";
 import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
 import { Input } from "@/components/ui/Input";
@@ -55,6 +56,7 @@ function LoginForm() {
     <main className="flex min-h-screen items-center justify-center bg-dark px-4 py-12">
       <div className="w-full max-w-md">
         <div className="mb-8 text-center">
+          <Logo size={112} className="mx-auto mb-3 h-24 w-24" priority />
           <Link
             href="/"
             className="font-display text-3xl font-black text-white transition-colors hover:text-secondary"

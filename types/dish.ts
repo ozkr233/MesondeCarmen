@@ -6,6 +6,7 @@ export type Dish = {
   category: string;
   image_url: string | null;
   is_available: boolean;
+  is_featured: boolean;
   created_at: string;
 };
 
@@ -16,6 +17,11 @@ export type CartItem = {
   price: number;
   image_url: string | null;
   quantity: number;
+};
+
+/** Ajustes del negocio editables desde /admin. */
+export type Settings = {
+  deliveryFee: number;
 };
 
 /**

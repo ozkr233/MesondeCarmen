@@ -5,21 +5,23 @@ import Image from "next/image";
 import { useEffect, useState } from "react";
 
 import { CheckoutForm } from "@/components/cart/CheckoutForm";
+import { OrderTotals } from "@/components/cart/OrderTotals";
 import { Button } from "@/components/ui/Button";
+import { trackEvent } from "@/lib/analytics";
 import { formatCOP } from "@/lib/format";
-import { sumItems, useCart } from "@/store/cart";
+import { countItems, sumItems, useCart } from "@/store/cart";
 
-export function CartDrawer() {
+export function CartDrawer({ deliveryFee }: { deliveryFee: number }) {
   const isOpen = useCart((state) => state.isOpen);
 
   // El panel se monta solo mientras está abierto: así su estado interno
   // (el paso del checkout) arranca limpio en cada apertura sin resetearlo
   // desde un efecto.
   if (!isOpen) return null;
-  return <CartPanel />;
+  return <CartPanel deliveryFee={deliveryFee} />;
 }
 
-function CartPanel() {
+function CartPanel({ deliveryFee }: { deliveryFee: number }) {
   const closeCart = useCart((state) => state.closeCart);
   const items = useCart((state) => state.items);
   const setQuantity = useCart((state) => state.setQuantity);
@@ -45,7 +47,7 @@ function CartPanel() {
     };
   }, [closeCart]);
 
-  const total = sumItems(items);
+  const subtotal = sumItems(items);
 
   return (
     <div className="fixed inset-0 z-[150]">
@@ -89,7 +91,7 @@ function CartPanel() {
           </div>
         ) : step === "cart" ? (
           <>
-            <div className="flex-1 space-y-3 overflow-y-auto p-4">
+            <div className="min-h-0 flex-1 space-y-3 overflow-y-auto overscroll-contain p-4">
               {items.map((item) => (
                 <div
                   key={item.id}
@@ -103,6 +105,11 @@ function CartPanel() {
                         fill
                         sizes="80px"
                         className="object-cover"
+                        // El panel se monta dentro de un overlay `fixed` al
+                        // hacer clic; con el `lazy` por defecto el navegador no
+                        // llega a pedir estas miniaturas y el recuadro se
+                        // quedaba vacío.
+                        loading="eager"
                       />
                     ) : (
                       <div className="flex h-full items-center justify-center text-2xl">
@@ -154,24 +161,28 @@ function CartPanel() {
             </div>
 
             <footer className="border-t border-dark/10 bg-white p-5">
-              <div className="mb-4 flex items-center justify-between">
-                <span className="text-lg font-semibold text-dark/70">Total</span>
-                <span className="text-2xl font-black text-primary">
-                  {formatCOP(total)}
-                </span>
-              </div>
+              <OrderTotals subtotal={subtotal} deliveryFee={deliveryFee} />
               <Button
                 variant="whatsapp"
                 size="lg"
-                className="w-full"
-                onClick={() => setRequestedStep("checkout")}
+                className="mt-4 w-full"
+                onClick={() => {
+                  trackEvent("checkout_iniciado", {
+                    total: subtotal + deliveryFee,
+                    items: countItems(items),
+                  });
+                  setRequestedStep("checkout");
+                }}
               >
                 Continuar con el pedido
               </Button>
             </footer>
           </>
         ) : (
-          <CheckoutForm onBack={() => setRequestedStep("cart")} />
+          <CheckoutForm
+            deliveryFee={deliveryFee}
+            onBack={() => setRequestedStep("cart")}
+          />
         )}
       </aside>
     </div>

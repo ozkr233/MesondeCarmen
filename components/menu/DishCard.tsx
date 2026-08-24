@@ -5,6 +5,7 @@ import Image from "next/image";
 import { useEffect, useRef, useState } from "react";
 
 import { Button } from "@/components/ui/Button";
+import { trackEvent } from "@/lib/analytics";
 import { formatCOP } from "@/lib/format";
 import { useCart } from "@/store/cart";
 import type { Dish } from "@/types/dish";
@@ -24,6 +25,7 @@ export function DishCard({ dish }: { dish: Dish }) {
 
   function handleAdd() {
     addItem(dish);
+    trackEvent("carrito_agregado", { plato: dish.name });
     setJustAdded(true);
     if (timer.current) clearTimeout(timer.current);
     timer.current = setTimeout(() => setJustAdded(false), 1600);

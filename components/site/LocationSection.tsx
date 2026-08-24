@@ -1,5 +1,5 @@
+import { WhatsAppLink } from "@/components/site/WhatsAppLink";
 import { site } from "@/lib/site";
-import { DEFAULT_GREETING, whatsappLink } from "@/lib/whatsapp";
 
 export function LocationSection() {
   return (
@@ -43,14 +43,12 @@ export function LocationSection() {
             </InfoBlock>
 
             <InfoBlock title="📞 Pide Domicilio">
-              <a
-                href={whatsappLink(DEFAULT_GREETING)}
-                target="_blank"
-                rel="noopener noreferrer"
+              <WhatsAppLink
+                origen="ubicacion"
                 className="text-lg font-bold text-whatsapp-dark hover:underline"
               >
                 {site.phoneDisplay}
-              </a>
+              </WhatsAppLink>
             </InfoBlock>
           </div>
         </div>

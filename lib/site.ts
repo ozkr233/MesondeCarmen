@@ -17,3 +17,32 @@ export const site = {
   heroImage:
     "https://z-cdn-media.chatglm.cn/files/618438aa-692a-41ff-aa52-46821d36a49d.jpeg?auth_key=1885199246-fe9d77de764141fabf8ae1c90e3e5f4a-0-0becbdcf641017680cd84cf9bf071961",
 } as const;
+
+/**
+ * Orden en que se muestran las categorías en la carta. Sin esto se ordenarían
+ * alfabéticamente y las bebidas saldrían antes que los platos fuertes.
+ * Las categorías que no estén aquí van al final, en orden alfabético.
+ */
+export const CATEGORY_ORDER = [
+  "Entradas",
+  "Sopas",
+  "Arroces",
+  "Asados",
+  "Guisados",
+  "Fritos",
+  "Especialidades Guajiras",
+  "Platos Fuertes",
+  "Bebidas",
+  "Postres",
+] as const;
+
+export function compareCategories(a: string, b: string): number {
+  const indexA = CATEGORY_ORDER.indexOf(a as (typeof CATEGORY_ORDER)[number]);
+  const indexB = CATEGORY_ORDER.indexOf(b as (typeof CATEGORY_ORDER)[number]);
+
+  // -1 (no listada) pasa a ser la última posición.
+  const rankA = indexA === -1 ? CATEGORY_ORDER.length : indexA;
+  const rankB = indexB === -1 ? CATEGORY_ORDER.length : indexB;
+
+  return rankA - rankB || a.localeCompare(b, "es");
+}

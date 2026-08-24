@@ -1,20 +1,38 @@
 "use client";
 
-import { Eye, EyeOff, Pencil, Plus, Trash2, UtensilsCrossed } from "lucide-react";
+import { Pencil, Plus, Trash2, UtensilsCrossed } from "lucide-react";
 import Image from "next/image";
 import { useRouter } from "next/navigation";
-import { useState, useTransition } from "react";
+import { useOptimistic, useState, useTransition } from "react";
 
+import {
+  deleteDish,
+  toggleAvailability,
+  toggleFeatured,
+} from "@/app/admin/actions";
 import { DishForm } from "@/components/admin/DishForm";
 import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
-import { deleteDish, toggleAvailability } from "@/app/admin/actions";
+import { Switch } from "@/components/ui/Switch";
 import { formatCOP } from "@/lib/format";
 import type { Dish } from "@/types/dish";
+
+type Flag = "is_available" | "is_featured";
+type FlagChange = { id: string; field: Flag; value: boolean };
 
 export function DishTable({ dishes }: { dishes: Dish[] }) {
   const router = useRouter();
   const [pending, startTransition] = useTransition();
+
+  // Los interruptores responden al instante; si la acción falla, el estado
+  // optimista se descarta solo al terminar la transición.
+  const [optimisticDishes, applyFlag] = useOptimistic(
+    dishes,
+    (current, change: FlagChange) =>
+      current.map((dish) =>
+        dish.id === change.id ? { ...dish, [change.field]: change.value } : dish,
+      ),
+  );
 
   const [formOpen, setFormOpen] = useState(false);
   const [editing, setEditing] = useState<Dish | null>(null);
@@ -30,10 +48,15 @@ export function DishTable({ dishes }: { dishes: Dish[] }) {
     setFormOpen(true);
   }
 
-  function handleToggle(dish: Dish) {
+  function handleFlag(dish: Dish, field: Flag, value: boolean) {
     setError(null);
     startTransition(async () => {
-      const result = await toggleAvailability(dish.id, !dish.is_available);
+      applyFlag({ id: dish.id, field, value });
+      const result =
+        field === "is_available"
+          ? await toggleAvailability(dish.id, value)
+          : await toggleFeatured(dish.id, value);
+
       if (result.error) setError(result.error);
       else router.refresh();
     });
@@ -55,20 +78,29 @@ export function DishTable({ dishes }: { dishes: Dish[] }) {
     });
   }
 
+  const featuredCount = optimisticDishes.filter((d) => d.is_featured).length;
+
   return (
     <>
       <div className="mb-6 flex flex-wrap items-center justify-between gap-3">
         <div>
           <h1 className="text-3xl font-bold text-dark">Platos</h1>
           <p className="text-sm text-dark/50">
-            {dishes.length} {dishes.length === 1 ? "plato" : "platos"} en la
-            carta
+            {dishes.length} {dishes.length === 1 ? "plato" : "platos"} ·{" "}
+            {featuredCount} en la portada
           </p>
         </div>
         <Button onClick={openCreate}>
           <Plus size={18} /> Nuevo plato
         </Button>
       </div>
+
+      {featuredCount > 3 && (
+        <p className="mb-4 rounded-lg bg-amber-50 p-3 text-sm text-amber-800">
+          Tienes {featuredCount} platos destacados, pero la portada solo muestra
+          los 3 más antiguos. Desmarca alguno para elegir cuáles salen.
+        </p>
+      )}
 
       {error && (
         <p className="mb-4 rounded-lg bg-red-50 p-3 text-sm text-red-700">
@@ -89,18 +121,21 @@ export function DishTable({ dishes }: { dishes: Dish[] }) {
         </Card>
       ) : (
         <Card className="overflow-x-auto">
-          <table className="w-full min-w-[720px] text-left text-sm">
+          <table className="w-full min-w-[800px] text-left text-sm">
             <thead className="border-b border-dark/10 bg-light/60 text-xs uppercase tracking-wide text-dark/50">
               <tr>
                 <th className="px-4 py-3 font-semibold">Plato</th>
                 <th className="px-4 py-3 font-semibold">Categoría</th>
                 <th className="px-4 py-3 font-semibold">Precio</th>
-                <th className="px-4 py-3 font-semibold">Estado</th>
+                <th className="px-4 py-3 text-center font-semibold">
+                  Disponible
+                </th>
+                <th className="px-4 py-3 text-center font-semibold">Portada</th>
                 <th className="px-4 py-3 text-right font-semibold">Acciones</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-dark/5">
-              {dishes.map((dish) => (
+              {optimisticDishes.map((dish) => (
                 <tr key={dish.id} className="align-middle hover:bg-light/50">
                   <td className="px-4 py-3">
                     <div className="flex items-center gap-3">
@@ -134,33 +169,40 @@ export function DishTable({ dishes }: { dishes: Dish[] }) {
                     {formatCOP(dish.price)}
                   </td>
                   <td className="px-4 py-3">
-                    <span
-                      className={
-                        dish.is_available
-                          ? "rounded-full bg-green-100 px-2.5 py-1 text-xs font-bold text-green-800"
-                          : "rounded-full bg-dark/10 px-2.5 py-1 text-xs font-bold text-dark/50"
-                      }
-                    >
-                      {dish.is_available ? "Disponible" : "Agotado"}
-                    </span>
-                  </td>
-                  <td className="px-4 py-3">
-                    <div className="flex justify-end gap-1">
-                      <IconAction
+                    <div className="flex justify-center">
+                      <Switch
+                        checked={dish.is_available}
+                        disabled={pending}
                         label={
                           dish.is_available
                             ? `Marcar ${dish.name} como agotado`
                             : `Marcar ${dish.name} como disponible`
                         }
-                        onClick={() => handleToggle(dish)}
+                        onChange={(next) =>
+                          handleFlag(dish, "is_available", next)
+                        }
+                      />
+                    </div>
+                  </td>
+                  <td className="px-4 py-3">
+                    <div className="flex justify-center">
+                      <Switch
+                        tone="gold"
+                        checked={dish.is_featured}
                         disabled={pending}
-                      >
-                        {dish.is_available ? (
-                          <Eye size={16} />
-                        ) : (
-                          <EyeOff size={16} />
-                        )}
-                      </IconAction>
+                        label={
+                          dish.is_featured
+                            ? `Quitar ${dish.name} de la portada`
+                            : `Mostrar ${dish.name} en la portada`
+                        }
+                        onChange={(next) =>
+                          handleFlag(dish, "is_featured", next)
+                        }
+                      />
+                    </div>
+                  </td>
+                  <td className="px-4 py-3">
+                    <div className="flex justify-end gap-1">
                       <IconAction
                         label={`Editar ${dish.name}`}
                         onClick={() => openEdit(dish)}
