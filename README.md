@@ -181,11 +181,9 @@ Pendientes que no se resuelven desde el código:
 
 1. En **Search Console → Sitemaps**, enviar `sitemap.xml` una vez tras el
    primer deploy con estos cambios.
-2. Añadir las coordenadas del local en `site.geo` (hay un TODO en
-   [lib/site.ts](lib/site.ts)): ayudan al posicionamiento en búsquedas cercanas.
-3. Rellenar `site.sameAs` con la URL del perfil de Google Business y las redes,
+2. Rellenar `site.sameAs` con la URL del perfil de Google Business y las redes,
    para que Google confirme que la web y la ficha del negocio son lo mismo.
-4. Reemplazar la foto del hero por una propia alojada en el proyecto: hoy viene
+3. Reemplazar la foto del hero por una propia alojada en el proyecto: hoy viene
    de un CDN externo con una clave que puede caducar, y al ser un fondo de CSS
    no se optimiza — es lo más pesado de la portada y eso puntúa en el ranking.
 

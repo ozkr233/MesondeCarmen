@@ -54,6 +54,11 @@ export function restaurantSchema() {
       addressRegion: address.region,
       addressCountry: address.country,
     },
+    geo: {
+      "@type": "GeoCoordinates",
+      latitude: site.geo.lat,
+      longitude: site.geo.lng,
+    },
     openingHoursSpecification: site.openingHours.map(
       ({ days, opens, closes }) => ({
         "@type": "OpeningHoursSpecification",

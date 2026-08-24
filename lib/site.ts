@@ -43,9 +43,7 @@ export const site = {
    * negocio son lo mismo.
    */
   sameAs: [] as string[],
-  // TODO: coordenadas exactas del local para el posicionamiento local. Se
-  // sacan de Google Maps (clic derecho sobre el punto → copiar coordenadas) y
-  // se añaden aquí como `geo: { lat: 11.5xxx, lng: -72.9xxx }`.
+  /** Coordenadas del local. Pesan en las búsquedas "cerca de mí". */
   geo: { lat: 11.547495522157005, lng: -72.90956307067347 },
   /** Embed por consulta: no requiere API key y sigue a `address`. */
   mapsEmbedUrl:
