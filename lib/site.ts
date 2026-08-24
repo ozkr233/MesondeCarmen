@@ -5,12 +5,48 @@ export const site = {
   name: "El Mesón de Carmen",
   tagline: "El verdadero sabor de La Guajira.",
   city: "Riohacha, La Guajira",
+  /** Dominio de producción. Es el que se registró en Google Search Console. */
+  url: "https://mesondecarmen.com",
   phoneDisplay: "+57 313 760 4265",
+  /** El mismo teléfono en formato internacional: schema.org no acepta otro. */
+  phoneE164: "+573137604265",
   address: "Cl. 11 #9-29, Riohacha, La Guajira",
+  /** `address` despiezado para el `PostalAddress` de los datos estructurados. */
+  addressParts: {
+    street: "Cl. 11 #9-29",
+    locality: "Riohacha",
+    region: "La Guajira",
+    country: "CO",
+  },
   hours: [
     "Lunes a Sábado: 11:00 AM - 9:00 PM",
     "Domingo: 11:00 AM - 5:00 PM",
   ],
+  /**
+   * Los mismos horarios que `hours`, en el formato que entiende Google.
+   * Si cambia uno hay que cambiar el otro: `hours` es lo que lee la persona.
+   */
+  openingHours: [
+    {
+      days: ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"],
+      opens: "11:00",
+      closes: "21:00",
+    },
+    { days: ["Sunday"], opens: "11:00", closes: "17:00" },
+  ],
+  servesCuisine: ["Comida guajira", "Comida colombiana", "Comida típica"],
+  /** Rango de precios en la escala de Google ($ a $$$$). */
+  priceRange: "$$",
+  /**
+   * Perfiles oficiales del negocio (Google Business, Instagram, Facebook).
+   * Añadirlos aquí ayuda a Google a confirmar que la web y la ficha del
+   * negocio son lo mismo.
+   */
+  sameAs: [] as string[],
+  // TODO: coordenadas exactas del local para el posicionamiento local. Se
+  // sacan de Google Maps (clic derecho sobre el punto → copiar coordenadas) y
+  // se añaden aquí como `geo: { lat: 11.5xxx, lng: -72.9xxx }`.
+  geo: { lat: 11.547495522157005, lng: -72.90956307067347 },
   /** Embed por consulta: no requiere API key y sigue a `address`. */
   mapsEmbedUrl:
     "https://www.google.com/maps?q=Cl.+11+%239-29,+Riohacha,+La+Guajira&output=embed",

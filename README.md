@@ -133,6 +133,9 @@ app/
   admin/(panel)/pedidos/   Listado de pedidos y métricas
   admin/actions.ts         Server Actions: crear, editar, borrar, interruptores, envío
   actions/orders.ts        Server Action pública que registra el pedido
+  sitemap.ts               /sitemap.xml para Google
+  robots.ts                /robots.txt (bloquea /admin, apunta al sitemap)
+  admin/layout.tsx         Solo marca todo /admin como noindex
 components/
   site/                    Hero, WhyUs, Ubicación, Footer, cabecera, botones flotantes
   menu/                    Carta agrupada, navegación de categorías, tarjeta de plato
@@ -144,6 +147,7 @@ store/cart.ts              Carrito (Zustand + localStorage)
 lib/queries.ts             Consultas de lectura de platos y ajustes
 lib/orders.ts              Consultas de pedidos y estadísticas del panel
 lib/analytics.ts           Eventos del embudo (Vercel Analytics)
+lib/seo.ts                 URL pública y datos estructurados (JSON-LD)
 lib/                       Formato de precios, mensajes de WhatsApp, datos del negocio
 proxy.ts                   Protege /admin y refresca la sesión
 supabase/schema.sql        Instalación completa desde cero
@@ -155,6 +159,35 @@ public/logo.png            Logo con el fondo recortado, el que usa el sitio
 app/icon.png               Favicon · app/opengraph-image.png  Vista previa al compartir
 Placeholder.html           Diseño original, conservado como referencia
 ```
+
+## SEO
+
+Todo lo técnico ya está en el código y se regenera solo en cada deploy:
+
+| Qué | Dónde |
+| --- | --- |
+| `sitemap.xml` con `/` y `/carta` | [app/sitemap.ts](app/sitemap.ts) |
+| `robots.txt` (bloquea `/admin`) | [app/robots.ts](app/robots.ts) |
+| Título, descripción, Open Graph, canonical | [app/layout.tsx](app/layout.tsx) y el `metadata` de cada página |
+| Ficha del negocio y carta para Google (JSON-LD) | [lib/seo.ts](lib/seo.ts) |
+
+Los datos que ve Google (dirección, teléfono, horarios, redes) salen de `site`
+en [lib/site.ts](lib/site.ts): **si cambia el horario o el teléfono, se cambia
+ahí y se actualizan a la vez la página y los datos estructurados.** El horario
+está dos veces en ese archivo a propósito — `hours` es el texto que lee el
+cliente y `openingHours` el que lee Google; hay que tocar los dos.
+
+Pendientes que no se resuelven desde el código:
+
+1. En **Search Console → Sitemaps**, enviar `sitemap.xml` una vez tras el
+   primer deploy con estos cambios.
+2. Añadir las coordenadas del local en `site.geo` (hay un TODO en
+   [lib/site.ts](lib/site.ts)): ayudan al posicionamiento en búsquedas cercanas.
+3. Rellenar `site.sameAs` con la URL del perfil de Google Business y las redes,
+   para que Google confirme que la web y la ficha del negocio son lo mismo.
+4. Reemplazar la foto del hero por una propia alojada en el proyecto: hoy viene
+   de un CDN externo con una clave que puede caducar, y al ser un fondo de CSS
+   no se optimiza — es lo más pesado de la portada y eso puntúa en el ranking.
 
 ## Notas técnicas
 

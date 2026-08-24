@@ -15,7 +15,10 @@ export const config = {
      * Todas las rutas menos:
      * - _next/static y _next/image (assets generados)
      * - favicon y archivos de imagen del directorio public
+     * - sitemap.xml y robots.txt: son públicos y no tienen sesión que
+     *   refrescar; pasar por aquí era una consulta a Supabase por cada
+     *   visita de un buscador.
      */
-    "/((?!_next/static|_next/image|favicon.ico|.*\\.(?:svg|png|jpg|jpeg|gif|webp|ico)$).*)",
+    "/((?!_next/static|_next/image|favicon.ico|sitemap.xml|robots.txt|.*\\.(?:svg|png|jpg|jpeg|gif|webp|ico)$).*)",
   ],
 };

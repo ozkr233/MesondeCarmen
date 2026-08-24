@@ -31,12 +31,17 @@ export function MenuSection({
   const groups = groupByCategory(dishes);
   const isFeatured = variant === "destacados";
   const { title, subtitle } = copy[variant];
+  // En la portada el <h1> lo pone el Hero, así que aquí es un <h2>. En /carta
+  // no hay hero: este es el encabezado principal de la página.
+  const Title = isFeatured ? "h2" : "h1";
 
   return (
     <section id="menu" className="bg-white py-20">
       <div className="mx-auto max-w-6xl px-4">
         <div className="mb-12 text-center">
-          <h2 className="mb-3 text-4xl font-bold text-primary">{title}</h2>
+          <Title className="mb-3 text-4xl font-bold text-primary">
+            {title}
+          </Title>
           <p className="text-lg text-dark/60">{subtitle}</p>
         </div>
 
