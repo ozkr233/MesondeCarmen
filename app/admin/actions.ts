@@ -17,7 +17,15 @@ export type DishInput = {
 
 export type ActionResult = { error: string | null };
 
+/** Banderas booleanas que se pueden cambiar en lote desde la tabla. */
+export type DishFlag = "is_available" | "is_featured";
+
+const DISH_FLAGS: readonly DishFlag[] = ["is_available", "is_featured"];
+
 const BUCKET = "menu-images";
+
+/** Tope de una acción en lote. Más que esto no cabe en una pantalla. */
+const MAX_BULK = 200;
 
 /**
  * Los docs de Next advierten que el matcher del proxy no cubre de forma fiable
@@ -152,6 +160,125 @@ export async function deleteDish(id: string): Promise<ActionResult> {
     // Best effort: si falla, la fila ya se borró y solo queda un huérfano.
     await supabase.storage.from(BUCKET).remove([path]);
   }
+
+  refresh();
+  return { error: null };
+}
+
+/**
+ * Duplica un plato para no rellenar a mano uno casi idéntico.
+ *
+ * Solo viaja el id: los datos se releen del servidor, siguiendo la regla de
+ * los docs de Next de no fiarse del contenido que manda el cliente.
+ *
+ * La foto se copia a un objeto nuevo en vez de reutilizar la URL. Si las dos
+ * filas apuntaran al mismo archivo, borrar la copia dejaría al original sin
+ * imagen, porque `deleteDish` limpia el bucket sin contar referencias.
+ */
+export async function duplicateDish(id: string): Promise<ActionResult> {
+  const supabase = await requireSession();
+
+  const { data: dish, error: readError } = await supabase
+    .from("dishes")
+    .select("name, description, price, category, image_url, is_available")
+    .eq("id", id)
+    .maybeSingle();
+
+  if (readError) return { error: readError.message };
+  if (!dish) return { error: "El plato ya no existe." };
+
+  let imageUrl: string | null = dish.image_url;
+  const sourcePath = storagePathFromUrl(dish.image_url);
+
+  if (sourcePath) {
+    const extension = sourcePath.split(".").pop() || "jpg";
+    const copyPath = `${crypto.randomUUID()}.${extension}`;
+    const { error: copyError } = await supabase.storage
+      .from(BUCKET)
+      .copy(sourcePath, copyPath);
+
+    // Si la copia falla se sigue sin foto: mejor eso que compartir el archivo.
+    imageUrl = copyError
+      ? null
+      : supabase.storage.from(BUCKET).getPublicUrl(copyPath).data.publicUrl;
+  }
+
+  const { error } = await supabase.from("dishes").insert({
+    name: `${dish.name} (copia)`,
+    description: dish.description,
+    price: dish.price,
+    category: dish.category,
+    image_url: imageUrl,
+    is_available: dish.is_available,
+    // La copia nace fuera de la portada: solo caben tres y ya están elegidos.
+    is_featured: false,
+  });
+  if (error) return { error: error.message };
+
+  refresh();
+  return { error: null };
+}
+
+/**
+ * Los ids llegan del cliente, así que se acotan antes de tocar Supabase. No
+ * hace falta comprobar propiedad: los platos son del negocio, no de un
+ * usuario, y RLS ya exige sesión para escribir en `dishes`.
+ */
+function validateIds(ids: string[]): string | null {
+  if (!Array.isArray(ids) || ids.length === 0)
+    return "No hay ningún plato seleccionado.";
+  if (ids.length > MAX_BULK)
+    return `No se pueden cambiar más de ${MAX_BULK} platos a la vez.`;
+  if (ids.some((id) => typeof id !== "string" || !id.trim()))
+    return "La selección no es válida.";
+  return null;
+}
+
+/** Cambia una bandera en varios platos con una sola escritura. */
+export async function bulkSetFlag(
+  ids: string[],
+  field: DishFlag,
+  value: boolean,
+): Promise<ActionResult> {
+  const invalid = validateIds(ids);
+  if (invalid) return { error: invalid };
+
+  // `field` acaba siendo un nombre de columna: solo se aceptan los literales.
+  if (!DISH_FLAGS.includes(field)) return { error: "Acción no válida." };
+
+  const supabase = await requireSession();
+  const { error } = await supabase
+    .from("dishes")
+    .update({ [field]: value })
+    .in("id", ids);
+  if (error) return { error: error.message };
+
+  refresh();
+  return { error: null };
+}
+
+/** Borra varios platos y, de paso, sus fotos del bucket. */
+export async function bulkDeleteDishes(ids: string[]): Promise<ActionResult> {
+  const invalid = validateIds(ids);
+  if (invalid) return { error: invalid };
+
+  const supabase = await requireSession();
+
+  // Igual que en `deleteDish`: las imágenes se leen antes de borrar las filas.
+  const { data: rows } = await supabase
+    .from("dishes")
+    .select("image_url")
+    .in("id", ids);
+
+  const { error } = await supabase.from("dishes").delete().in("id", ids);
+  if (error) return { error: error.message };
+
+  const paths = (rows ?? [])
+    .map((row) => storagePathFromUrl(row.image_url))
+    .filter((path): path is string => path !== null);
+
+  // Best effort y en una sola llamada: si falla, solo quedan huérfanos.
+  if (paths.length > 0) await supabase.storage.from(BUCKET).remove(paths);
 
   refresh();
   return { error: null };

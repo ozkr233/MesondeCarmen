@@ -3,15 +3,8 @@
 import type { InputHTMLAttributes, TextareaHTMLAttributes } from "react";
 import { useId } from "react";
 
+import { fieldClasses, labelClasses } from "@/components/ui/field";
 import { cn } from "@/lib/cn";
-
-const fieldClasses =
-  "w-full rounded-lg border border-dark/15 bg-white px-4 py-2.5 text-dark " +
-  "placeholder:text-dark/35 transition-colors " +
-  "focus:border-primary focus:outline-2 focus:outline-offset-0 focus:outline-primary/30 " +
-  "disabled:cursor-not-allowed disabled:bg-dark/5";
-
-const labelClasses = "mb-1.5 block text-sm font-semibold text-dark/80";
 
 type InputProps = InputHTMLAttributes<HTMLInputElement> & { label?: string };
 

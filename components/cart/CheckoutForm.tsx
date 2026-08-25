@@ -8,26 +8,33 @@ import { OrderTotals } from "@/components/cart/OrderTotals";
 import { Button } from "@/components/ui/Button";
 import { Input, Textarea } from "@/components/ui/Input";
 import { trackEvent } from "@/lib/analytics";
+import { orderCode } from "@/lib/order-code";
 import { buildOrderUrl, type CustomerInfo } from "@/lib/whatsapp";
 import { countItems, sumItems, useCart } from "@/store/cart";
 import type { CartItem } from "@/types/dish";
 
 const EMPTY: CustomerInfo = { name: "", phone: "", address: "", notes: "" };
 
-/** Más allá de esto se abre WhatsApp sin código y el pedido se guarda o no. */
+/** Más allá de esto se sigue adelante sin esperar a que termine el registro. */
 const SAVE_TIMEOUT_MS = 3000;
 
 /**
  * Registra el pedido en Supabase, pero nunca hace esperar al cliente más de
  * `SAVE_TIMEOUT_MS`: si la base se cae o va lenta, el pedido tiene que salir
  * igual. Perder el registro es un problema; perder la venta es peor.
+ *
+ * Agotar la espera no cancela nada — la petición sigue viva en el navegador y
+ * el pedido acaba guardándose — y el mensaje de WhatsApp ya lleva el código,
+ * así que el chat y el panel coinciden aunque aquí no se llegue a esperar.
  */
 async function saveWithTimeout(
   items: CartItem[],
   customer: CustomerInfo,
-): Promise<string | null> {
+  code: string,
+): Promise<void> {
   const save = saveOrder({
     items: items.map((item) => ({ id: item.id, quantity: item.quantity })),
+    code,
     name: customer.name,
     phone: customer.phone,
     address: customer.address,
@@ -35,18 +42,16 @@ async function saveWithTimeout(
   })
     .then((result) => {
       if (result.error) console.error("[pedido]", result.error);
-      return result.code;
     })
     .catch((error: unknown) => {
       console.error("[pedido]", error);
-      return null;
     });
 
-  const timeout = new Promise<null>((resolve) =>
-    setTimeout(() => resolve(null), SAVE_TIMEOUT_MS),
+  const timeout = new Promise<void>((resolve) =>
+    setTimeout(resolve, SAVE_TIMEOUT_MS),
   );
 
-  return Promise.race([save, timeout]);
+  await Promise.race([save, timeout]);
 }
 
 export function CheckoutForm({
@@ -74,14 +79,18 @@ export function CheckoutForm({
     setSending(true);
 
     // La pestaña se abre de forma síncrona dentro del submit para que el
-    // navegador no la trate como popup y la bloquee; se navega más abajo,
-    // cuando ya se sabe el código. Va sin `noopener` a propósito: esa opción
-    // devuelve null y perderíamos la referencia que hace falta para navegarla.
+    // navegador no la trate como popup y la bloquee; se navega justo después.
+    // Va sin `noopener` a propósito: esa opción devuelve null y perderíamos la
+    // referencia que hace falta para navegarla.
     const tab = window.open("about:blank", "_blank");
+
+    // El código se genera aquí, antes de guardar, y no en el servidor: así el
+    // mensaje sale de inmediato con el mismo código que llevará la fila, sin
+    // que el cliente espere a la base mirando una pestaña en blanco.
+    const code = orderCode();
 
     // `clear()` vacía el carrito al final, así que el detalle se copia antes.
     const snapshot = items;
-    const code = await saveWithTimeout(snapshot, customer);
     const url = buildOrderUrl(snapshot, customer, deliveryFee, code);
 
     if (tab) {
@@ -90,6 +99,8 @@ export function CheckoutForm({
     } else {
       window.location.href = url;
     }
+
+    await saveWithTimeout(snapshot, customer, code);
 
     trackEvent("pedido_enviado", {
       total: sumItems(snapshot) + deliveryFee,

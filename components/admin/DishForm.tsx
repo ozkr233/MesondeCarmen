@@ -8,15 +8,22 @@ import { createDish, updateDish, type DishInput } from "@/app/admin/actions";
 import { Button } from "@/components/ui/Button";
 import { Input, Textarea } from "@/components/ui/Input";
 import { Modal } from "@/components/ui/Modal";
+import { Select } from "@/components/ui/Select";
+import { DEFAULT_CATEGORY } from "@/lib/categories";
 import { createClient } from "@/utils/supabase/client";
 import type { Dish } from "@/types/dish";
 
 const BUCKET = "menu-images";
 const MAX_IMAGE_BYTES = 5 * 1024 * 1024;
 
+/** Valor centinela del desplegable que abre el campo de categoría nueva. */
+const NEW_CATEGORY = "__nueva__";
+
 type Props = {
   open: boolean;
   dish: Dish | null;
+  /** Categorías que ofrece el desplegable, en orden de carta. */
+  categories: string[];
   onClose: () => void;
   onSaved: () => void;
 };
@@ -26,7 +33,7 @@ type Props = {
  * Con la `key` por plato, abrir el formulario monta un componente nuevo y los
  * campos se inicializan solos — sin resetear estado desde un efecto.
  */
-export function DishForm({ open, dish, onClose, onSaved }: Props) {
+export function DishForm({ open, dish, categories, onClose, onSaved }: Props) {
   return (
     <Modal
       open={open}
@@ -36,6 +43,7 @@ export function DishForm({ open, dish, onClose, onSaved }: Props) {
       <DishFormBody
         key={dish?.id ?? "nuevo"}
         dish={dish}
+        categories={categories}
         onClose={onClose}
         onSaved={onSaved}
       />
@@ -66,7 +74,7 @@ function initialState(dish: Dish | null): FormState {
         name: "",
         description: "",
         price: "",
-        category: "Platos Fuertes",
+        category: DEFAULT_CATEGORY,
         is_available: true,
         is_featured: false,
       };
@@ -74,10 +82,12 @@ function initialState(dish: Dish | null): FormState {
 
 function DishFormBody({
   dish,
+  categories,
   onClose,
   onSaved,
 }: Omit<Props, "open">) {
   const [form, setForm] = useState<FormState>(() => initialState(dish));
+  const [newCategory, setNewCategory] = useState("");
   const [file, setFile] = useState<File | null>(null);
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   const [currentImage, setCurrentImage] = useState<string | null>(
@@ -86,6 +96,13 @@ function DishFormBody({
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const fileInput = useRef<HTMLInputElement>(null);
+
+  // Si el plato que se edita trae una categoría que no está en la lista, se
+  // añade: el desplegable nunca debe cambiarla en silencio al abrirlo.
+  const options =
+    dish && dish.category && !categories.includes(dish.category)
+      ? [...categories, dish.category]
+      : categories;
 
   // Las URLs de objeto hay que liberarlas o se filtra memoria.
   useEffect(() => {
@@ -154,6 +171,14 @@ function DishFormBody({
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
+
+    const category =
+      form.category === NEW_CATEGORY ? newCategory.trim() : form.category;
+    if (!category) {
+      setError("Escribe el nombre de la categoría nueva.");
+      return;
+    }
+
     setSaving(true);
     setError(null);
 
@@ -164,7 +189,7 @@ function DishFormBody({
         name: form.name,
         description: form.description,
         price: Number(form.price.replace(/[^\d.,-]/g, "").replace(",", ".")),
-        category: form.category,
+        category,
         image_url: imageUrl,
         is_available: form.is_available,
         is_featured: form.is_featured,
@@ -224,24 +249,33 @@ function DishFormBody({
           value={form.price}
           onChange={(event) => setForm({ ...form, price: event.target.value })}
         />
-        <Input
+        <Select
           label="Categoría"
           required
-          list="categorias-platos"
-          placeholder="Platos Fuertes"
           value={form.category}
           onChange={(event) =>
             setForm({ ...form, category: event.target.value })
           }
-        />
-        <datalist id="categorias-platos">
-          <option value="Platos Fuertes" />
-          <option value="Entradas" />
-          <option value="Sopas" />
-          <option value="Bebidas" />
-          <option value="Postres" />
-        </datalist>
+        >
+          {options.map((option) => (
+            <option key={option} value={option}>
+              {option}
+            </option>
+          ))}
+          <option value={NEW_CATEGORY}>Otra categoría…</option>
+        </Select>
       </div>
+
+      {form.category === NEW_CATEGORY && (
+        <Input
+          label="Nueva categoría"
+          required
+          autoFocus
+          placeholder="Mariscos"
+          value={newCategory}
+          onChange={(event) => setNewCategory(event.target.value)}
+        />
+      )}
 
       <div>
         <span className="mb-1.5 block text-sm font-semibold text-dark/80">

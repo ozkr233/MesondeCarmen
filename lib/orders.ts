@@ -57,7 +57,6 @@ const EMPTY_STATS: OrderStats = {
   total: 0,
   monthRevenue: 0,
   averageTicket: 0,
-  pending: 0,
   topDishes: [],
 };
 
@@ -67,6 +66,10 @@ const EMPTY_STATS: OrderStats = {
  * Se traen los pedidos de la ventana de 30 días y se agrega en JS en vez de
  * lanzar seis consultas agregadas: son decenas de filas, no millones, y así
  * los cortes de fecha usan la misma hora de Colombia en todos los cálculos.
+ *
+ * Cuenta todos los pedidos que salieron de la página, sea cual sea su
+ * `status`. El panel no ofrece manera de cambiarlo, así que filtrar por estado
+ * solo dejaría fuera ventas reales por una etiqueta que nadie toca.
  */
 export async function getOrderStats(): Promise<OrderStats> {
   const supabase = await createClient();
@@ -94,9 +97,7 @@ export async function getOrderStats(): Promise<OrderStats> {
   const orders = ((recent.data as Order[] | null) ?? []).map(normalizeOrder);
   const stats: OrderStats = { ...EMPTY_STATS, total: counted.count ?? 0 };
 
-  // Los cancelados cuentan como pedidos hechos, pero no como ingresos.
   const dishQuantities = new Map<string, number>();
-  let billableOrders = 0;
 
   for (const order of orders) {
     const at = new Date(order.created_at).getTime();
@@ -104,11 +105,7 @@ export async function getOrderStats(): Promise<OrderStats> {
     stats.month += 1;
     if (at >= weekStart) stats.week += 1;
     if (at >= todayStart) stats.today += 1;
-    if (order.status === "pendiente") stats.pending += 1;
 
-    if (order.status === "cancelado") continue;
-
-    billableOrders += 1;
     stats.monthRevenue += order.total;
     for (const item of order.order_items) {
       dishQuantities.set(
@@ -118,8 +115,8 @@ export async function getOrderStats(): Promise<OrderStats> {
     }
   }
 
-  stats.averageTicket = billableOrders
-    ? Math.round(stats.monthRevenue / billableOrders)
+  stats.averageTicket = stats.month
+    ? Math.round(stats.monthRevenue / stats.month)
     : 0;
 
   stats.topDishes = [...dishQuantities]

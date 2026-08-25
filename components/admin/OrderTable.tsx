@@ -2,22 +2,19 @@ import { ChevronDown, Phone, ShoppingBag } from "lucide-react";
 
 import { Card } from "@/components/ui/Card";
 import { formatCOP, formatDateTimeCO } from "@/lib/format";
-import { STATUS_LABELS, type Order, type OrderStatus } from "@/types/order";
+import type { Order } from "@/types/order";
 
 /**
  * Listado de pedidos del panel.
  *
  * Es un Server Component: el detalle se despliega con `<details>` nativo, así
  * que no hace falta estado ni mandar JavaScript por una tabla que solo se lee.
- * El estado se muestra como etiqueta; todavía no se puede cambiar desde aquí.
+ *
+ * No se muestra el `status` del pedido: no hay forma de cambiarlo desde el
+ * panel, así que todas las filas dirían "Pendiente" y la etiqueta solo haría
+ * dudar de pedidos que ya se atendieron por WhatsApp. Cada fila es un pedido
+ * que salió de la página, y así se cuenta.
  */
-
-const STATUS_STYLES: Record<OrderStatus, string> = {
-  pendiente: "bg-secondary/25 text-dark",
-  confirmado: "bg-blue-100 text-blue-800",
-  entregado: "bg-green-100 text-green-800",
-  cancelado: "bg-red-100 text-red-700",
-};
 
 export function OrderTable({ orders }: { orders: Order[] }) {
   if (orders.length === 0) {
@@ -52,17 +49,8 @@ function OrderRow({ order }: { order: Order }) {
         />
 
         <div className="min-w-0 flex-1">
-          <p className="flex flex-wrap items-center gap-2">
-            <span className="font-mono text-sm font-bold text-primary">
-              {order.code}
-            </span>
-            <span
-              className={`rounded-full px-2 py-0.5 text-xs font-bold uppercase tracking-wide ${
-                STATUS_STYLES[order.status]
-              }`}
-            >
-              {STATUS_LABELS[order.status]}
-            </span>
+          <p className="font-mono text-sm font-bold text-primary">
+            {order.code}
           </p>
           <p className="truncate text-sm text-dark/60">
             {order.customer_name} · {formatDateTimeCO(order.created_at)}

@@ -1,3 +1,12 @@
+/**
+ * Los valores que admite la columna `status` de `orders`, que existe con un
+ * CHECK en la base y nace siempre en `pendiente`.
+ *
+ * El panel no los muestra ni los cambia a propósito: cada pedido que sale de
+ * la página cuenta igual, y llevar estados al día sería trabajo diario para el
+ * dueño. El tipo se queda porque la columna sigue ahí y se lee en las
+ * consultas; el día que haga falta gestionarlos, este es el sitio.
+ */
 export const ORDER_STATUSES = [
   "pendiente",
   "confirmado",
@@ -6,17 +15,6 @@ export const ORDER_STATUSES = [
 ] as const;
 
 export type OrderStatus = (typeof ORDER_STATUSES)[number];
-
-export const STATUS_LABELS: Record<OrderStatus, string> = {
-  pendiente: "Pendiente",
-  confirmado: "Confirmado",
-  entregado: "Entregado",
-  cancelado: "Cancelado",
-};
-
-export function isOrderStatus(value: string): value is OrderStatus {
-  return (ORDER_STATUSES as readonly string[]).includes(value);
-}
 
 export type OrderItem = {
   id: string;
@@ -41,17 +39,21 @@ export type Order = {
   order_items: OrderItem[];
 };
 
-/** Resumen que alimenta las tarjetas del dashboard. */
+/**
+ * Resumen que alimenta las tarjetas del dashboard.
+ *
+ * Todas las cifras cuentan cada pedido que salió de la página, sin filtrar por
+ * estado: mientras nadie los administre, filtrar solo escondería ventas.
+ */
 export type OrderStats = {
   today: number;
   week: number;
   month: number;
   total: number;
-  /** Ingresos de los pedidos del mes que no están cancelados. */
+  /** Ingresos de los pedidos de los últimos 30 días. */
   monthRevenue: number;
-  /** Ticket promedio del mes, sin contar cancelados. */
+  /** Ticket promedio de los últimos 30 días. */
   averageTicket: number;
-  pending: number;
   /** Platos más pedidos en los últimos 30 días. */
   topDishes: { name: string; quantity: number }[];
 };

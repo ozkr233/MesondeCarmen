@@ -7,9 +7,9 @@ import type { OrderStats } from "@/types/order";
 /**
  * Resumen de arriba del panel de pedidos.
  *
- * No hay tarjeta de "pendientes": mientras no exista el cambio de estado,
- * todos los pedidos se quedan en `pendiente` y ese número sería idéntico al
- * total. `stats.pending` se sigue calculando para cuando los estados lleguen.
+ * Cada cifra cuenta todos los pedidos que salieron de la página, sin mirar su
+ * estado. No hay tarjeta de "pendientes" ni de "cancelados": nadie administra
+ * esas etiquetas, así que marcarían el total entero y no dirían nada.
  */
 export function OrderStatsCards({ stats }: { stats: OrderStats }) {
   return (
@@ -25,7 +25,7 @@ export function OrderStatsCards({ stats }: { stats: OrderStats }) {
         <Stat
           label="Ingresos de los últimos 30 días"
           value={formatCOP(stats.monthRevenue)}
-          hint="Sin contar los pedidos cancelados."
+          hint="Todos los pedidos hechos desde la página."
           icon={<TrendingUp size={18} className="text-primary" />}
         />
         <Stat
