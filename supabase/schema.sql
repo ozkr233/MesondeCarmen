@@ -171,7 +171,7 @@ alter table public.orders
     check (delivery_fee >= 0),
   add constraint orders_payment_method_valid
     check (payment_method is null
-           or payment_method in ('efectivo','tarjeta','nequi')),
+           or payment_method in ('efectivo','transferencia','breb')),
   add constraint orders_cash_bill_valid
     check (cash_bill is null or cash_bill >= 0);
 

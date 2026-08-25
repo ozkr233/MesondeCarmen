@@ -122,7 +122,7 @@ export function CheckoutForm({
       // Corregir no debe seguir mostrando el regaño: en cuanto el campo pasa,
       // el error se va. Solo se revalida lo que ya estaba marcado.
       //
-      // El pago arrastra al billete: pasar de Efectivo a Nequi esconde el
+      // El pago arrastra al billete: pasar de Efectivo a Bre-B esconde el
       // segundo campo, y su error tiene que irse con él o quedaría bloqueando
       // el envío desde un campo que ya no se ve.
       const affected: FieldName[] =
@@ -292,8 +292,8 @@ export function CheckoutForm({
           ))}
         </Select>
 
-        {/* El billete solo tiene sentido con efectivo: con tarjeta o Nequi no
-            hay cambio que preparar y el campo estorbaría. */}
+        {/* El billete solo tiene sentido con efectivo: con transferencia o
+            Bre-B no hay cambio que preparar y el campo estorbaría. */}
         {customer.payment === "efectivo" && (
           <Select
             id={FIELD_IDS.cashBill}

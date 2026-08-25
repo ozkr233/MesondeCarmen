@@ -24,14 +24,14 @@ type CustomerFields = {
  * `payment_method` en Postgres; lo que lee el cliente sale de `PAYMENT_LABELS`.
  * Cambiar uno de estos literales obliga a una migración, no solo a tocar aquí.
  */
-export const PAYMENT_METHODS = ["efectivo", "tarjeta", "nequi"] as const;
+export const PAYMENT_METHODS = ["efectivo", "transferencia", "breb"] as const;
 
 export type PaymentMethod = (typeof PAYMENT_METHODS)[number];
 
 export const PAYMENT_LABELS: Record<PaymentMethod, string> = {
   efectivo: "Efectivo",
-  tarjeta: "Tarjeta",
-  nequi: "Nequi",
+  transferencia: "Transferencia",
+  breb: "Bre-B",
 };
 
 /**
@@ -148,8 +148,8 @@ export function validateField(
       return null;
     }
     case "cashBill": {
-      // El billete solo se pregunta al pagar en efectivo: con tarjeta o Nequi
-      // el campo ni se muestra y no puede bloquear el envío.
+      // El billete solo se pregunta al pagar en efectivo: con transferencia o
+      // Bre-B el campo ni se muestra y no puede bloquear el envío.
       if (customer.payment !== "efectivo") return null;
       if (!isCashOption(customer.cashBill)) {
         return "Dinos con cuánto vas a pagar para llevarte el cambio.";
@@ -193,7 +193,7 @@ export function cleanCustomer(customer: CustomerFields): CustomerFields {
   const payment = isPaymentMethod(customer.payment) ? customer.payment : "";
 
   // El billete solo sobrevive si se paga en efectivo. Sin esto, elegir Efectivo
-  // con $50.000 y cambiar después a Nequi dejaría un billete colgado que el
+  // con $50.000 y cambiar después a Bre-B dejaría un billete colgado que el
   // formulario ya no muestra pero el mensaje sí contaría.
   const cashBill =
     payment === "efectivo" && isCashOption(customer.cashBill)
