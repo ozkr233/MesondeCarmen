@@ -1,10 +1,22 @@
 import { formatCOP } from "@/lib/format";
+import { site } from "@/lib/site";
 import { sumItems } from "@/store/cart";
 import type { CartItem } from "@/types/dish";
 
-/** Número del restaurante en formato internacional sin `+` ni separadores. */
+/**
+ * Número del restaurante en formato internacional sin `+` ni separadores.
+ *
+ * Sale de `site.phoneE164`, que es el mismo dato que se muestra en la web y que
+ * se publica en los datos estructurados. Antes había aquí una copia literal, y
+ * un cambio de teléfono podía dejar los botones de WhatsApp apuntando a un
+ * número y a Google anunciando otro.
+ *
+ * `NEXT_PUBLIC_WHATSAPP_NUMBER` sigue funcionando, pero ya solo como override:
+ * sirve para que un deploy de preview escriba a un número de pruebas sin tocar
+ * los datos del negocio. Para cambiar el teléfono de verdad, `lib/site.ts`.
+ */
 export const WHATSAPP_NUMBER = (
-  process.env.NEXT_PUBLIC_WHATSAPP_NUMBER ?? "573137604265"
+  process.env.NEXT_PUBLIC_WHATSAPP_NUMBER ?? site.phoneE164
 ).replace(/\D/g, "");
 
 export type CustomerInfo = {

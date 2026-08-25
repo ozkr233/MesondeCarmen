@@ -7,6 +7,11 @@ export const site = {
   city: "Riohacha, La Guajira",
   /** Dominio de producción. Es el que se registró en Google Search Console. */
   url: "https://mesondecarmen.com",
+  /**
+   * El teléfono del negocio, y la única copia que hay. Cambiar estas dos líneas
+   * cambia a la vez lo que se ve en la web, lo que Google publica y a dónde
+   * escriben los botones de WhatsApp (`lib/whatsapp.ts` lo deriva de aquí).
+   */
   phoneDisplay: "+57 313 760 4265",
   /** El mismo teléfono en formato internacional: schema.org no acepta otro. */
   phoneE164: "+573137604265",

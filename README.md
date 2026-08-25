@@ -57,10 +57,15 @@ Rellena en `.env.local`:
 | `NEXT_PUBLIC_SUPABASE_URL` | Project Settings → Data API → Project URL |
 | `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY` | Project Settings → API Keys → Publishable key (`sb_publishable_…`). Si tu proyecto todavía muestra la llave `anon`, sirve igual. |
 | `SUPABASE_SECRET_KEY` | Project Settings → API Keys → Secret keys (`sb_secret_…`). **Sin el prefijo `NEXT_PUBLIC_`**: se salta RLS y solo la usa el servidor para registrar pedidos. |
-| `NEXT_PUBLIC_WHATSAPP_NUMBER` | Número del restaurante, sin `+` ni espacios |
+| `NEXT_PUBLIC_WHATSAPP_NUMBER` | *Opcional.* Pisa el número de `lib/site.ts` para apuntar un preview a un teléfono de pruebas. Sin `+` ni espacios. |
 
 > La llave secreta no va en git ni en el navegador. En Vercel se añade en
 > **Project Settings → Environment Variables**, sin marcarla como pública.
+
+> **¿Cambió el teléfono del negocio?** No es una variable de entorno: se edita
+> `phoneDisplay` y `phoneE164` en [`lib/site.ts`](lib/site.ts) y se despliega.
+> De ahí salen a la vez el número visible, el de los datos estructurados que lee
+> Google y el de los enlaces de WhatsApp.
 
 ### 4. Arrancar
 
