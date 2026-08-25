@@ -9,6 +9,7 @@ import { OrderTotals } from "@/components/cart/OrderTotals";
 import { Button } from "@/components/ui/Button";
 import { trackEvent } from "@/lib/analytics";
 import { formatCOP } from "@/lib/format";
+import { MAX_QUANTITY } from "@/lib/validation";
 import { countItems, sumItems, useCart } from "@/store/cart";
 
 export function CartDrawer({ deliveryFee }: { deliveryFee: number }) {
@@ -146,6 +147,12 @@ function CartPanel({ deliveryFee }: { deliveryFee: number }) {
                         </span>
                         <QtyButton
                           label={`Agregar una unidad de ${item.name}`}
+                          disabled={item.quantity >= MAX_QUANTITY}
+                          title={
+                            item.quantity >= MAX_QUANTITY
+                              ? `No se pueden pedir más de ${MAX_QUANTITY} unidades de un plato.`
+                              : undefined
+                          }
                           onClick={() => setQuantity(item.id, item.quantity + 1)}
                         >
                           <Plus size={14} />
@@ -192,18 +199,24 @@ function CartPanel({ deliveryFee }: { deliveryFee: number }) {
 function QtyButton({
   label,
   onClick,
+  disabled,
+  title,
   children,
 }: {
   label: string;
   onClick: () => void;
+  disabled?: boolean;
+  title?: string;
   children: React.ReactNode;
 }) {
   return (
     <button
       type="button"
       onClick={onClick}
+      disabled={disabled}
+      title={title ?? label}
       aria-label={label}
-      className="p-1.5 text-dark/60 transition-colors hover:bg-dark/5 hover:text-dark"
+      className="p-1.5 text-dark/60 transition-colors hover:bg-dark/5 hover:text-dark disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:bg-transparent"
     >
       {children}
     </button>

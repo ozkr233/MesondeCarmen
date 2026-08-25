@@ -9,6 +9,15 @@ import { Button } from "@/components/ui/Button";
 import { Input, Textarea } from "@/components/ui/Input";
 import { trackEvent } from "@/lib/analytics";
 import { orderCode } from "@/lib/order-code";
+import {
+  addressWarning,
+  cleanCustomer,
+  LIMITS,
+  validateCustomer,
+  validateField,
+  type CustomerErrors,
+  type FieldName,
+} from "@/lib/validation";
 import { buildOrderUrl, type CustomerInfo } from "@/lib/whatsapp";
 import { countItems, sumItems, useCart } from "@/store/cart";
 import type { CartItem } from "@/types/dish";
@@ -17,6 +26,16 @@ const EMPTY: CustomerInfo = { name: "", phone: "", address: "", notes: "" };
 
 /** Más allá de esto se sigue adelante sin esperar a que termine el registro. */
 const SAVE_TIMEOUT_MS = 3000;
+
+/** Ids fijos: hacen falta para poder enfocar el primer campo que falle. */
+const FIELD_IDS: Record<FieldName, string> = {
+  name: "checkout-name",
+  phone: "checkout-phone",
+  address: "checkout-address",
+};
+
+/** Orden en que se recorren los campos al buscar el primero con error. */
+const FIELD_ORDER: FieldName[] = ["name", "phone", "address"];
 
 /**
  * Registra el pedido en Supabase, pero nunca hace esperar al cliente más de
@@ -66,16 +85,50 @@ export function CheckoutForm({
   const closeCart = useCart((state) => state.closeCart);
 
   const [customer, setCustomer] = useState<CustomerInfo>(EMPTY);
+  const [errors, setErrors] = useState<CustomerErrors>({});
+  const [touched, setTouched] = useState<Partial<Record<FieldName, boolean>>>(
+    {},
+  );
   const [sending, setSending] = useState(false);
 
   const update =
     (field: keyof CustomerInfo) =>
-    (event: { target: { value: string } }) =>
-      setCustomer((prev) => ({ ...prev, [field]: event.target.value }));
+    (event: { target: { value: string } }) => {
+      const next = { ...customer, [field]: event.target.value };
+      setCustomer(next);
+
+      // Corregir no debe seguir mostrando el regaño: en cuanto el campo pasa,
+      // el error se va. Solo se revalida lo que ya estaba marcado.
+      if (field !== "notes" && errors[field]) {
+        const message = validateField(field, next);
+        if (!message) setErrors((prev) => ({ ...prev, [field]: undefined }));
+      }
+    };
+
+  const handleBlur = (field: FieldName) => () => {
+    setTouched((prev) => ({ ...prev, [field]: true }));
+    setErrors((prev) => ({
+      ...prev,
+      [field]: validateField(field, customer) ?? undefined,
+    }));
+  };
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (items.length === 0 || sending) return;
+
+    // La validación va aquí, antes de `setSending` y sobre todo antes de abrir
+    // la pestaña: si no, se abriría WhatsApp con datos que no sirven.
+    const found = validateCustomer(customer);
+    if (Object.keys(found).length > 0) {
+      setErrors(found);
+      setTouched({ name: true, phone: true, address: true });
+
+      const first = FIELD_ORDER.find((field) => found[field]);
+      if (first) document.getElementById(FIELD_IDS[first])?.focus();
+      return;
+    }
+
     setSending(true);
 
     // La pestaña se abre de forma síncrona dentro del submit para que el
@@ -91,7 +144,10 @@ export function CheckoutForm({
 
     // `clear()` vacía el carrito al final, así que el detalle se copia antes.
     const snapshot = items;
-    const url = buildOrderUrl(snapshot, customer, deliveryFee, code);
+    // Recortado y con el teléfono normalizado: el dueño recibe siempre un
+    // "300 123 4567" que puede pulsar, y la fila cabe en los CHECK de la base.
+    const clean = cleanCustomer(customer);
+    const url = buildOrderUrl(snapshot, clean, deliveryFee, code);
 
     if (tab) {
       tab.location.href = url;
@@ -100,7 +156,7 @@ export function CheckoutForm({
       window.location.href = url;
     }
 
-    await saveWithTimeout(snapshot, customer, code);
+    await saveWithTimeout(snapshot, clean, code);
 
     trackEvent("pedido_enviado", {
       total: sumItems(snapshot) + deliveryFee,
@@ -112,11 +168,19 @@ export function CheckoutForm({
     closeCart();
   }
 
+  // El aviso de dirección corta no bloquea el envío: solo sugiere completarla,
+  // y únicamente después de que la persona haya salido del campo.
+  const shortAddress = touched.address ? addressWarning(customer.address) : null;
+
   return (
     // `min-h-0` en los dos niveles: sin él, un hijo flex conserva su
     // min-height:auto, no se encoge por debajo del contenido y el pie con el
     // botón de enviar se sale de la pantalla en vez de que scrollee el formulario.
-    <form onSubmit={handleSubmit} className="flex min-h-0 flex-1 flex-col">
+    <form
+      onSubmit={handleSubmit}
+      noValidate
+      className="flex min-h-0 flex-1 flex-col"
+    >
       <div className="min-h-0 flex-1 space-y-4 overflow-y-auto overscroll-contain p-5">
         <button
           type="button"
@@ -132,36 +196,62 @@ export function CheckoutForm({
         </p>
 
         <Input
+          id={FIELD_IDS.name}
           label="Nombre"
           required
           autoComplete="name"
+          maxLength={LIMITS.name}
           placeholder="Tu nombre completo"
           value={customer.name}
+          error={errors.name}
           onChange={update("name")}
+          onBlur={handleBlur("name")}
         />
         <Input
+          id={FIELD_IDS.phone}
           label="Teléfono"
           required
           type="tel"
           inputMode="tel"
           autoComplete="tel"
+          maxLength={LIMITS.phone}
           placeholder="300 123 4567"
           value={customer.phone}
+          error={errors.phone}
+          hint="Te escribiremos por WhatsApp a este número."
           onChange={update("phone")}
+          onBlur={handleBlur("phone")}
         />
         <Input
+          id={FIELD_IDS.address}
           label="Dirección de entrega"
           required
           autoComplete="street-address"
+          maxLength={LIMITS.address}
           placeholder="Barrio, calle y número"
           value={customer.address}
+          error={errors.address}
+          hint={
+            shortAddress ? (
+              <span className="text-amber-700">{shortAddress}</span>
+            ) : (
+              "Incluye el barrio y un punto de referencia."
+            )
+          }
           onChange={update("address")}
+          onBlur={handleBlur("address")}
         />
         <Textarea
           label="Notas del pedido"
           rows={3}
+          maxLength={LIMITS.notes}
           placeholder="Sin cebolla, tocar el timbre, punto de referencia…"
           value={customer.notes}
+          hint={
+            <span className="block text-right tabular-nums">
+              {customer.notes.length}/{LIMITS.notes}
+            </span>
+          }
           onChange={update("notes")}
         />
       </div>

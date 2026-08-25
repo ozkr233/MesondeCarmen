@@ -2,6 +2,12 @@
 
 import { isOrderCode } from "@/lib/order-code";
 import { getSettings } from "@/lib/queries";
+import {
+  cleanCustomer,
+  MAX_LINES,
+  MAX_QUANTITY,
+  validateCustomer,
+} from "@/lib/validation";
 import { createAdminClient } from "@/utils/supabase/admin";
 import { createClient } from "@/utils/supabase/server";
 
@@ -45,16 +51,16 @@ export type SaveOrderResult = {
   error: string | null;
 };
 
-const MAX_LINES = 50;
-const MAX_QUANTITY = 99;
-
 function validate(input: OrderInput): string | null {
   if (input.items.length === 0) return "El pedido no tiene platos.";
   if (input.items.length > MAX_LINES) return "El pedido tiene demasiados platos.";
   if (!isOrderCode(input.code)) return "El código del pedido no es válido.";
-  if (!input.name.trim()) return "El nombre es obligatorio.";
-  if (!input.phone.trim()) return "El teléfono es obligatorio.";
-  if (!input.address.trim()) return "La dirección es obligatoria.";
+
+  // Las mismas reglas que ve el formulario, incluidas las longitudes. Sin esto
+  // un campo largo pasaba de aquí y moría en el CHECK de Postgres, que solo
+  // sabe devolver un error genérico.
+  const invalid = Object.values(validateCustomer(input))[0];
+  if (invalid) return invalid;
 
   for (const line of input.items) {
     if (!line.id) return "Hay un plato sin identificar en el pedido.";
@@ -137,13 +143,17 @@ export async function saveOrder(input: OrderInput): Promise<SaveOrderResult> {
   // la tabla: así se conoce sin tener que leer la fila insertada.
   const id = crypto.randomUUID();
 
+  // Mismo recorte y misma normalización de teléfono que aplica el formulario,
+  // por si el pedido llega por otro camino.
+  const customer = cleanCustomer(input);
+
   const { error: orderError } = await admin.from("orders").insert({
     id,
     code: input.code,
-    customer_name: input.name.trim(),
-    customer_phone: input.phone.trim(),
-    customer_address: input.address.trim(),
-    notes: input.notes.trim() || null,
+    customer_name: customer.name,
+    customer_phone: customer.phone,
+    customer_address: customer.address,
+    notes: customer.notes || null,
     subtotal,
     delivery_fee: deliveryFee,
   });

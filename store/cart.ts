@@ -1,6 +1,7 @@
 import { create } from "zustand";
 import { persist } from "zustand/middleware";
 
+import { MAX_LINES, MAX_QUANTITY } from "@/lib/validation";
 import type { CartItem, Dish } from "@/types/dish";
 
 type CartState = {
@@ -13,6 +14,13 @@ type CartState = {
   openCart: () => void;
   closeCart: () => void;
 };
+
+/**
+ * Los topes son los mismos que valida `saveOrder` y que exige el CHECK de
+ * `order_items`. Sin ellos el carrito deja armar un pedido que el servidor
+ * rechaza después, cuando el mensaje de WhatsApp ya salió.
+ */
+const clamp = (quantity: number) => Math.min(quantity, MAX_QUANTITY);
 
 export const useCart = create<CartState>()(
   persist(
@@ -27,11 +35,15 @@ export const useCart = create<CartState>()(
             return {
               items: state.items.map((item) =>
                 item.id === dish.id
-                  ? { ...item, quantity: item.quantity + 1 }
+                  ? { ...item, quantity: clamp(item.quantity + 1) }
                   : item,
               ),
             };
           }
+          // La carta no llega a 50 platos, así que esto no se alcanza pulsando;
+          // está por si el carrito guardado en localStorage viene manipulado.
+          if (state.items.length >= MAX_LINES) return state;
+
           return {
             items: [
               ...state.items,
@@ -54,7 +66,9 @@ export const useCart = create<CartState>()(
           items:
             quantity <= 0
               ? state.items.filter((i) => i.id !== id)
-              : state.items.map((i) => (i.id === id ? { ...i, quantity } : i)),
+              : state.items.map((i) =>
+                  i.id === id ? { ...i, quantity: clamp(quantity) } : i,
+                ),
         })),
 
       clear: () => set({ items: [] }),
