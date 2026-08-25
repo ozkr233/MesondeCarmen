@@ -7,12 +7,17 @@ import { saveOrder } from "@/app/actions/orders";
 import { OrderTotals } from "@/components/cart/OrderTotals";
 import { Button } from "@/components/ui/Button";
 import { Input, Textarea } from "@/components/ui/Input";
+import { Select } from "@/components/ui/Select";
 import { trackEvent } from "@/lib/analytics";
+import { formatCOP } from "@/lib/format";
 import { orderCode } from "@/lib/order-code";
 import {
   addressWarning,
+  CASH_OPTIONS,
   cleanCustomer,
   LIMITS,
+  PAYMENT_LABELS,
+  PAYMENT_METHODS,
   validateCustomer,
   validateField,
   type CustomerErrors,
@@ -22,7 +27,14 @@ import { buildOrderUrl, type CustomerInfo } from "@/lib/whatsapp";
 import { countItems, sumItems, useCart } from "@/store/cart";
 import type { CartItem } from "@/types/dish";
 
-const EMPTY: CustomerInfo = { name: "", phone: "", address: "", notes: "" };
+const EMPTY: CustomerInfo = {
+  name: "",
+  phone: "",
+  address: "",
+  notes: "",
+  payment: "",
+  cashBill: "",
+};
 
 /** Más allá de esto se sigue adelante sin esperar a que termine el registro. */
 const SAVE_TIMEOUT_MS = 3000;
@@ -32,10 +44,18 @@ const FIELD_IDS: Record<FieldName, string> = {
   name: "checkout-name",
   phone: "checkout-phone",
   address: "checkout-address",
+  payment: "checkout-payment",
+  cashBill: "checkout-cash",
 };
 
 /** Orden en que se recorren los campos al buscar el primero con error. */
-const FIELD_ORDER: FieldName[] = ["name", "phone", "address"];
+const FIELD_ORDER: FieldName[] = [
+  "name",
+  "phone",
+  "address",
+  "payment",
+  "cashBill",
+];
 
 /**
  * Registra el pedido en Supabase, pero nunca hace esperar al cliente más de
@@ -58,6 +78,8 @@ async function saveWithTimeout(
     phone: customer.phone,
     address: customer.address,
     notes: customer.notes,
+    payment: customer.payment,
+    cashBill: customer.cashBill,
   })
     .then((result) => {
       if (result.error) console.error("[pedido]", result.error);
@@ -99,9 +121,21 @@ export function CheckoutForm({
 
       // Corregir no debe seguir mostrando el regaño: en cuanto el campo pasa,
       // el error se va. Solo se revalida lo que ya estaba marcado.
-      if (field !== "notes" && errors[field]) {
-        const message = validateField(field, next);
-        if (!message) setErrors((prev) => ({ ...prev, [field]: undefined }));
+      //
+      // El pago arrastra al billete: pasar de Efectivo a Nequi esconde el
+      // segundo campo, y su error tiene que irse con él o quedaría bloqueando
+      // el envío desde un campo que ya no se ve.
+      const affected: FieldName[] =
+        field === "payment"
+          ? ["payment", "cashBill"]
+          : field === "notes"
+            ? []
+            : [field];
+
+      for (const target of affected) {
+        if (errors[target] && !validateField(target, next)) {
+          setErrors((prev) => ({ ...prev, [target]: undefined }));
+        }
       }
     };
 
@@ -122,7 +156,7 @@ export function CheckoutForm({
     const found = validateCustomer(customer);
     if (Object.keys(found).length > 0) {
       setErrors(found);
-      setTouched({ name: true, phone: true, address: true });
+      setTouched(Object.fromEntries(FIELD_ORDER.map((field) => [field, true])));
 
       const first = FIELD_ORDER.find((field) => found[field]);
       if (first) document.getElementById(FIELD_IDS[first])?.focus();
@@ -241,6 +275,47 @@ export function CheckoutForm({
           onChange={update("address")}
           onBlur={handleBlur("address")}
         />
+        <Select
+          id={FIELD_IDS.payment}
+          label="Método de pago"
+          required
+          value={customer.payment}
+          error={errors.payment}
+          onChange={update("payment")}
+          onBlur={handleBlur("payment")}
+        >
+          <option value="">Selecciona…</option>
+          {PAYMENT_METHODS.map((method) => (
+            <option key={method} value={method}>
+              {PAYMENT_LABELS[method]}
+            </option>
+          ))}
+        </Select>
+
+        {/* El billete solo tiene sentido con efectivo: con tarjeta o Nequi no
+            hay cambio que preparar y el campo estorbaría. */}
+        {customer.payment === "efectivo" && (
+          <Select
+            id={FIELD_IDS.cashBill}
+            label="¿Con cuánto vas a pagar?"
+            required
+            value={customer.cashBill}
+            error={errors.cashBill}
+            hint="Así el domiciliario sale con el cambio listo."
+            onChange={update("cashBill")}
+            onBlur={handleBlur("cashBill")}
+          >
+            <option value="">Selecciona…</option>
+            {CASH_OPTIONS.map((bill) => (
+              <option key={bill} value={String(bill)}>
+                {bill === 0
+                  ? "Pago exacto (no necesito cambio)"
+                  : `Con ${formatCOP(bill)}`}
+              </option>
+            ))}
+          </Select>
+        )}
+
         <Textarea
           label="Notas del pedido"
           rows={3}

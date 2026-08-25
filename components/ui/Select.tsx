@@ -4,32 +4,50 @@ import { ChevronDown } from "lucide-react";
 import type { SelectHTMLAttributes } from "react";
 import { useId } from "react";
 
-import { fieldClasses, labelClasses } from "@/components/ui/field";
+import {
+  fieldBase,
+  FieldLabel,
+  fieldInvalid,
+  fieldNormal,
+  fieldParts,
+  type FieldExtras,
+} from "@/components/ui/field";
 import { cn } from "@/lib/cn";
 
-type Props = SelectHTMLAttributes<HTMLSelectElement> & { label?: string };
+type Props = SelectHTMLAttributes<HTMLSelectElement> & FieldExtras;
 
 /**
- * `<select>` nativo con la misma piel que `Input`. Nativo a propósito: en el
- * móvil abre el selector del sistema, que es lo que espera quien administra la
- * carta desde el teléfono, y no arrastra ninguna librería nueva.
+ * `<select>` nativo con la misma piel que `Input`, error incluido. Nativo a
+ * propósito: en el móvil abre el selector del sistema, que es lo que espera
+ * quien pide desde el teléfono, y no arrastra ninguna librería nueva.
  */
-export function Select({ label, className, id, children, ...props }: Props) {
+export function Select({
+  label,
+  error,
+  hint,
+  className,
+  id,
+  children,
+  ...props
+}: Props) {
   const generatedId = useId();
   const selectId = id ?? generatedId;
+  const field = fieldParts(selectId, error, hint);
 
   return (
     <div>
-      {label && (
-        <label htmlFor={selectId} className={labelClasses}>
-          {label}
-          {props.required && <span className="text-primary"> *</span>}
-        </label>
-      )}
+      <FieldLabel htmlFor={selectId} label={label} required={props.required} />
       <div className="relative">
         <select
           id={selectId}
-          className={cn(fieldClasses, "appearance-none pr-10", className)}
+          className={cn(
+            fieldBase,
+            error ? fieldInvalid : fieldNormal,
+            "appearance-none pr-10",
+            className,
+          )}
+          aria-invalid={error ? true : undefined}
+          aria-describedby={field.describedBy}
           {...props}
         >
           {children}
@@ -42,6 +60,7 @@ export function Select({ label, className, id, children, ...props }: Props) {
           className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-dark/40"
         />
       </div>
+      {field.messages}
     </div>
   );
 }

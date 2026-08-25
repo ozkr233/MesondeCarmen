@@ -6,6 +6,7 @@ import {
   cleanCustomer,
   MAX_LINES,
   MAX_QUANTITY,
+  parseCashBill,
   validateCustomer,
 } from "@/lib/validation";
 import { createAdminClient } from "@/utils/supabase/admin";
@@ -44,6 +45,8 @@ export type OrderInput = {
   phone: string;
   address: string;
   notes: string;
+  payment: string;
+  cashBill: string;
 };
 
 export type SaveOrderResult = {
@@ -154,6 +157,11 @@ export async function saveOrder(input: OrderInput): Promise<SaveOrderResult> {
     customer_phone: customer.phone,
     customer_address: customer.address,
     notes: customer.notes || null,
+    // `cleanCustomer` ya descartó cualquier valor fuera de las listas, así que
+    // aquí solo puede llegar un método válido o nada. `cash_bill` en 0 es "paga
+    // exacto"; null, que no aplica.
+    payment_method: customer.payment || null,
+    cash_bill: parseCashBill(customer),
     subtotal,
     delivery_fee: deliveryFee,
   });

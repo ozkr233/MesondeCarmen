@@ -12,9 +12,9 @@ export const site = {
    * cambia a la vez lo que se ve en la web, lo que Google publica y a dónde
    * escriben los botones de WhatsApp (`lib/whatsapp.ts` lo deriva de aquí).
    */
-  phoneDisplay: "+57 313 760 4265",
+  phoneDisplay: "+57 300 554 6977",
   /** El mismo teléfono en formato internacional: schema.org no acepta otro. */
-  phoneE164: "+573137604265",
+  phoneE164: "+573005546977",
   address: "Cl. 11 #9-29, Riohacha, La Guajira",
   /** `address` despiezado para el `PostalAddress` de los datos estructurados. */
   addressParts: {

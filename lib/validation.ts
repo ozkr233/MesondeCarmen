@@ -11,7 +11,48 @@ type CustomerFields = {
   phone: string;
   address: string;
   notes: string;
+  /** Uno de `PAYMENT_METHODS`, o "" mientras no se haya elegido. */
+  payment: string;
+  /** Billete de `CASH_OPTIONS` como texto. Solo aplica al pagar en efectivo. */
+  cashBill: string;
 };
+
+/**
+ * Formas de pago que acepta el restaurante.
+ *
+ * En minúscula y sin tildes porque este es el valor que viaja al CHECK de
+ * `payment_method` en Postgres; lo que lee el cliente sale de `PAYMENT_LABELS`.
+ * Cambiar uno de estos literales obliga a una migración, no solo a tocar aquí.
+ */
+export const PAYMENT_METHODS = ["efectivo", "tarjeta", "nequi"] as const;
+
+export type PaymentMethod = (typeof PAYMENT_METHODS)[number];
+
+export const PAYMENT_LABELS: Record<PaymentMethod, string> = {
+  efectivo: "Efectivo",
+  tarjeta: "Tarjeta",
+  nequi: "Nequi",
+};
+
+/**
+ * Billetes con los que se suele pagar un domicilio. El `0` es "pago con el
+ * valor exacto": así el dueño sabe cuándo no tiene que salir con cambio, que es
+ * distinto de que el cliente no haya contestado.
+ *
+ * Lista cerrada a propósito, en vez de un campo de monto libre: el dato llega
+ * limpio y el cambio se calcula sin fiarse de lo que se digitó.
+ */
+export const CASH_OPTIONS = [0, 10000, 20000, 50000, 100000] as const;
+
+function isPaymentMethod(value: string): value is PaymentMethod {
+  return (PAYMENT_METHODS as readonly string[]).includes(value);
+}
+
+function isCashOption(value: string): boolean {
+  return (CASH_OPTIONS as readonly number[]).some(
+    (option) => String(option) === value,
+  );
+}
 
 /** Los mismos topes que los CHECK de `orders` en supabase/03_pedidos.sql. */
 export const LIMITS = {
@@ -65,7 +106,12 @@ export function formatPhoneCO(digits: string): string {
     : digits;
 }
 
-export type FieldName = "name" | "phone" | "address";
+export type FieldName =
+  | "name"
+  | "phone"
+  | "address"
+  | "payment"
+  | "cashBill";
 export type CustomerErrors = Partial<Record<FieldName, string>>;
 
 /** Valida un campo suelto, para poder avisar al salir de él. */
@@ -95,6 +141,21 @@ export function validateField(
         return "La dirección es demasiado larga.";
       return null;
     }
+    case "payment": {
+      // Un valor fuera de la lista solo llega si se manipuló el `<select>`; se
+      // trata igual que no haber elegido, sin mensaje aparte que lo delate.
+      if (!isPaymentMethod(customer.payment)) return "Elige cómo vas a pagar.";
+      return null;
+    }
+    case "cashBill": {
+      // El billete solo se pregunta al pagar en efectivo: con tarjeta o Nequi
+      // el campo ni se muestra y no puede bloquear el envío.
+      if (customer.payment !== "efectivo") return null;
+      if (!isCashOption(customer.cashBill)) {
+        return "Dinos con cuánto vas a pagar para llevarte el cambio.";
+      }
+      return null;
+    }
   }
 }
 
@@ -102,7 +163,13 @@ export function validateField(
 export function validateCustomer(customer: CustomerFields): CustomerErrors {
   const errors: CustomerErrors = {};
 
-  for (const field of ["name", "phone", "address"] as const) {
+  for (const field of [
+    "name",
+    "phone",
+    "address",
+    "payment",
+    "cashBill",
+  ] as const) {
     const message = validateField(field, customer);
     if (message) errors[field] = message;
   }
@@ -121,10 +188,37 @@ export function addressWarning(address: string): string | null {
 
 /** Deja los datos del cliente listos para WhatsApp y para la base. */
 export function cleanCustomer(customer: CustomerFields): CustomerFields {
+  // El pago se filtra contra las listas cerradas: lo que no esté en ellas sale
+  // como "" en vez de viajar tal cual al mensaje o a la base.
+  const payment = isPaymentMethod(customer.payment) ? customer.payment : "";
+
+  // El billete solo sobrevive si se paga en efectivo. Sin esto, elegir Efectivo
+  // con $50.000 y cambiar después a Nequi dejaría un billete colgado que el
+  // formulario ya no muestra pero el mensaje sí contaría.
+  const cashBill =
+    payment === "efectivo" && isCashOption(customer.cashBill)
+      ? customer.cashBill
+      : "";
+
   return {
     name: customer.name.trim().slice(0, LIMITS.name),
     phone: formatPhoneCO(normalizePhone(customer.phone)).slice(0, LIMITS.phone),
     address: customer.address.trim().slice(0, LIMITS.address),
     notes: customer.notes.trim().slice(0, LIMITS.notes),
+    payment,
+    cashBill,
   };
+}
+
+/**
+ * El billete como número, para calcular el cambio y para guardarlo.
+ *
+ * `null` cuando no aplica (no se paga en efectivo o no se eligió billete); `0`
+ * cuando el cliente dijo que paga con el valor exacto. Los dos casos se ven
+ * igual en un campo de texto vacío, y hay que distinguirlos.
+ */
+export function parseCashBill(customer: CustomerFields): number | null {
+  if (customer.payment !== "efectivo") return null;
+  if (!isCashOption(customer.cashBill)) return null;
+  return Number(customer.cashBill);
 }

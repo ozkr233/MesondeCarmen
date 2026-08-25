@@ -2,6 +2,7 @@ import { ChevronDown, Phone, ShoppingBag } from "lucide-react";
 
 import { Card } from "@/components/ui/Card";
 import { formatCOP, formatDateTimeCO } from "@/lib/format";
+import { PAYMENT_LABELS } from "@/lib/validation";
 import type { Order } from "@/types/order";
 
 /**
@@ -103,6 +104,12 @@ function OrderRow({ order }: { order: Order }) {
             <Label>Dirección</Label>
             <p className="text-dark/70">{order.customer_address}</p>
           </div>
+          {order.payment_method && (
+            <div>
+              <Label>Pago</Label>
+              <p className="text-dark/70">{paymentText(order)}</p>
+            </div>
+          )}
         </dl>
 
         {order.notes && (
@@ -119,6 +126,23 @@ function OrderRow({ order }: { order: Order }) {
       </div>
     </details>
   );
+}
+
+/**
+ * Cómo paga y, si es en efectivo, cuánto cambio hay que separar. Es la misma
+ * cuenta que va en el mensaje de WhatsApp, para que el panel no obligue a
+ * volver al chat.
+ */
+function paymentText(order: Order): string {
+  const label = order.payment_method ? PAYMENT_LABELS[order.payment_method] : "";
+  const bill = order.cash_bill;
+
+  if (bill === null) return label;
+  if (bill === 0) return `${label} — paga con el valor exacto`;
+
+  const change = bill - order.total;
+  const suffix = change > 0 ? ` (cambio: ${formatCOP(change)})` : "";
+  return `${label} — paga con ${formatCOP(bill)}${suffix}`;
 }
 
 function Label({ children }: { children: React.ReactNode }) {

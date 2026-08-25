@@ -1,5 +1,6 @@
 import { formatCOP } from "@/lib/format";
 import { site } from "@/lib/site";
+import { parseCashBill, PAYMENT_LABELS, type PaymentMethod } from "@/lib/validation";
 import { sumItems } from "@/store/cart";
 import type { CartItem } from "@/types/dish";
 
@@ -24,7 +25,30 @@ export type CustomerInfo = {
   phone: string;
   address: string;
   notes: string;
+  payment: string;
+  cashBill: string;
 };
+
+/**
+ * Cómo va a pagar el cliente, en una línea.
+ *
+ * Con efectivo se resuelve aquí el cálculo que si no haría el dueño con el
+ * cliente en la puerta: cuánto cambio hay que llevar. Si el billete no alcanza
+ * para el total no se escribe cambio alguno — se lo aclaran por el chat.
+ */
+function paymentLine(customer: CustomerInfo, total: number): string | null {
+  const method = customer.payment as PaymentMethod;
+  if (!(method in PAYMENT_LABELS)) return null;
+
+  const label = PAYMENT_LABELS[method];
+  const bill = parseCashBill(customer);
+  if (bill === null) return `*Pago:* ${label}`;
+  if (bill === 0) return `*Pago:* ${label} — paga con el valor exacto`;
+
+  const change = bill - total;
+  const suffix = change > 0 ? ` (cambio: ${formatCOP(change)})` : "";
+  return `*Pago:* ${label} — paga con ${formatCOP(bill)}${suffix}`;
+}
 
 /** Enlace de chat suelto, para los botones de "Pedir ahora" del sitio. */
 export function whatsappLink(text: string): string {
@@ -72,11 +96,17 @@ export function buildOrderMessage(
     parts.push(`Subtotal: ${formatCOP(subtotal)}`);
     parts.push(`Domicilio: ${formatCOP(deliveryFee)}`);
   }
-  parts.push(`*TOTAL: ${formatCOP(subtotal + deliveryFee)}*`);
+  const total = subtotal + deliveryFee;
+  parts.push(`*TOTAL: ${formatCOP(total)}*`);
 
-  if (customer.notes.trim()) {
-    parts.push("", `*Notas:* ${customer.notes.trim()}`);
-  }
+  // Pago y notas cierran el mensaje, separados del total por una línea en
+  // blanco. El pago no puede ir antes: el cambio se calcula sobre el total.
+  const tail = [
+    paymentLine(customer, total),
+    customer.notes.trim() ? `*Notas:* ${customer.notes.trim()}` : null,
+  ].filter((line) => line !== null);
+
+  if (tail.length > 0) parts.push("", ...tail);
 
   return parts.join("\n");
 }

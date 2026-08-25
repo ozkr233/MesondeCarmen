@@ -119,6 +119,10 @@ create table if not exists public.orders (
   customer_phone   text          not null,
   customer_address text          not null,
   notes            text,
+  -- Cómo paga: valor interno del formulario, no la etiqueta que ve el cliente.
+  -- `cash_bill` distingue null (no aplica) de 0 (paga con el valor exacto).
+  payment_method   text,
+  cash_bill        numeric(12,2),
   subtotal         numeric(12,2) not null default 0,
   delivery_fee     numeric(12,2) not null default 0,
   total            numeric(12,2) generated always as (subtotal + delivery_fee) stored,
@@ -147,6 +151,8 @@ alter table public.orders drop constraint if exists orders_customer_address_len;
 alter table public.orders drop constraint if exists orders_notes_len;
 alter table public.orders drop constraint if exists orders_subtotal_positive;
 alter table public.orders drop constraint if exists orders_delivery_fee_positive;
+alter table public.orders drop constraint if exists orders_payment_method_valid;
+alter table public.orders drop constraint if exists orders_cash_bill_valid;
 
 alter table public.orders
   add constraint orders_code_len
@@ -162,7 +168,12 @@ alter table public.orders
   add constraint orders_subtotal_positive
     check (subtotal >= 0),
   add constraint orders_delivery_fee_positive
-    check (delivery_fee >= 0);
+    check (delivery_fee >= 0),
+  add constraint orders_payment_method_valid
+    check (payment_method is null
+           or payment_method in ('efectivo','tarjeta','nequi')),
+  add constraint orders_cash_bill_valid
+    check (cash_bill is null or cash_bill >= 0);
 
 
 -- ----------------------------------------------------------------------------

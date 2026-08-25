@@ -16,6 +16,8 @@ export const ORDER_STATUSES = [
 
 export type OrderStatus = (typeof ORDER_STATUSES)[number];
 
+import type { PaymentMethod } from "@/lib/validation";
+
 export type OrderItem = {
   id: string;
   dish_id: string | null;
@@ -31,6 +33,10 @@ export type Order = {
   customer_phone: string;
   customer_address: string;
   notes: string | null;
+  /** null en los pedidos anteriores a que se preguntara el método de pago. */
+  payment_method: PaymentMethod | null;
+  /** Billete con el que paga en efectivo. 0 = exacto, null = no aplica. */
+  cash_bill: number | null;
   subtotal: number;
   delivery_fee: number;
   total: number;
@@ -68,6 +74,9 @@ export function normalizeOrder(row: Order): Order {
     subtotal: Number(row.subtotal) || 0,
     delivery_fee: Number(row.delivery_fee) || 0,
     total: Number(row.total) || 0,
+    // El null hay que conservarlo: "no se preguntó" no es lo mismo que "paga
+    // con el valor exacto", que es un 0 legítimo.
+    cash_bill: row.cash_bill === null ? null : Number(row.cash_bill) || 0,
     order_items: (row.order_items ?? []).map((item) => ({
       ...item,
       unit_price: Number(item.unit_price) || 0,
