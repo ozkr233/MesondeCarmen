@@ -197,9 +197,13 @@ alter table public.order_items
 
 -- ----------------------------------------------------------------------------
 -- 7. RLS sobre los pedidos
---    Cualquier visitante puede CREAR un pedido (es un formulario público),
---    pero LEERLOS es solo para el dueño: contienen nombre, teléfono y
---    dirección de los clientes.
+--    Nadie escribe pedidos desde el navegador. No hay política de INSERT: los
+--    registra la Server Action `saveOrder` con la llave secreta, que se salta
+--    RLS. Así, releer los precios de `dishes` antes de guardar deja de ser una
+--    convención del formulario y pasa a ser la única puerta que existe.
+--
+--    LEERLOS es solo para el dueño: contienen nombre, teléfono y dirección de
+--    los clientes.
 -- ----------------------------------------------------------------------------
 alter table public.orders      enable row level security;
 alter table public.order_items enable row level security;
@@ -209,10 +213,9 @@ drop policy if exists "orders_select_authenticated"  on public.orders;
 drop policy if exists "orders_update_authenticated"  on public.orders;
 drop policy if exists "orders_delete_authenticated"  on public.orders;
 
-create policy "orders_insert_public"
-  on public.orders for insert
-  to anon, authenticated
-  with check (true);
+-- El `revoke` es redundante con la ausencia de política: deja la intención
+-- escrita también en los permisos, no solo en las reglas de RLS.
+revoke insert on public.orders from anon, authenticated;
 
 create policy "orders_select_authenticated"
   on public.orders for select
@@ -234,10 +237,7 @@ drop policy if exists "order_items_insert_public"        on public.order_items;
 drop policy if exists "order_items_select_authenticated" on public.order_items;
 drop policy if exists "order_items_delete_authenticated" on public.order_items;
 
-create policy "order_items_insert_public"
-  on public.order_items for insert
-  to anon, authenticated
-  with check (true);
+revoke insert on public.order_items from anon, authenticated;
 
 create policy "order_items_select_authenticated"
   on public.order_items for select

@@ -2,6 +2,7 @@
 
 import { isOrderCode } from "@/lib/order-code";
 import { getSettings } from "@/lib/queries";
+import { createAdminClient } from "@/utils/supabase/admin";
 import { createClient } from "@/utils/supabase/server";
 
 /**
@@ -13,10 +14,14 @@ import { createClient } from "@/utils/supabase/server";
  * precios se vuelven a leer de `dishes`, así que un carrito manipulado en
  * localStorage no puede ensuciar las estadísticas del panel.
  *
- * Todo se escribe sin pedir la fila de vuelta. RLS deja INSERTAR a `anon` pero
- * solo deja LEER `orders` a usuarios autenticados, y un `.select()` encadenado
- * al insert obliga a Postgres a devolver la fila recién creada: la lectura no
- * pasa la política, el statement falla entero y el pedido no llega a guardarse.
+ * Las escrituras van con la llave secreta (`createAdminClient`), porque
+ * `orders` y `order_items` ya no aceptan inserts de `anon`: este es el único
+ * camino que queda para registrar un pedido, y las reglas de arriba dejan de
+ * ser una convención del formulario para ser la única puerta que existe.
+ *
+ * Aun así se escribe sin pedir la fila de vuelta. Un `.select()` encadenado al
+ * insert obliga a Postgres a devolver la fila recién creada, y eso ata la
+ * escritura a una política de lectura que no hace ninguna falta aquí.
  */
 
 /** Lo mínimo que el cliente necesita mandar: qué plato y cuántos. */
@@ -69,6 +74,9 @@ export async function saveOrder(input: OrderInput): Promise<SaveOrderResult> {
 
   const supabase = await createClient();
 
+  // La lectura de la carta va con la clave pública: `dishes` es público y no
+  // hace falta más privilegio del imprescindible para consultarlo.
+  //
   // Los precios se releen de la base: el carrito vive en localStorage y llega
   // manipulable. Si no, las cifras del panel no significarían nada.
   const ids = [...new Set(input.items.map((line) => line.id))];
@@ -114,12 +122,22 @@ export async function saveOrder(input: OrderInput): Promise<SaveOrderResult> {
   );
   const { deliveryFee } = await getSettings();
 
+  // A partir de aquí se escribe, y escribir pedidos es privilegio del servidor.
+  // Si falta la llave se registra y se devuelve error en vez de lanzar: el
+  // mensaje de WhatsApp ya salió y el checkout no debe romperse por esto.
+  let admin: ReturnType<typeof createAdminClient>;
+  try {
+    admin = createAdminClient();
+  } catch (error) {
+    console.error("[orders] llave secreta:", error);
+    return { code: null, error: "No se pudo registrar el pedido." };
+  }
+
   // El id se genera aquí en vez de dejárselo al `default gen_random_uuid()` de
-  // la tabla: es la forma de conocerlo sin leer la fila insertada, que es justo
-  // lo que RLS no permite a un visitante anónimo.
+  // la tabla: así se conoce sin tener que leer la fila insertada.
   const id = crypto.randomUUID();
 
-  const { error: orderError } = await supabase.from("orders").insert({
+  const { error: orderError } = await admin.from("orders").insert({
     id,
     code: input.code,
     customer_name: input.name.trim(),
@@ -135,7 +153,7 @@ export async function saveOrder(input: OrderInput): Promise<SaveOrderResult> {
     return { code: null, error: "No se pudo registrar el pedido." };
   }
 
-  const { error: itemsError } = await supabase
+  const { error: itemsError } = await admin
     .from("order_items")
     .insert(lines.map((line) => ({ ...line, order_id: id })));
 
