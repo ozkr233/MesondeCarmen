@@ -14,6 +14,62 @@
 
 
 -- ----------------------------------------------------------------------------
+-- 0. Quiénes son administradores
+--
+--    Tener sesión no basta: hay que estar en esta tabla. La clave es el
+--    `user_id` y no el correo, así que cambiar de email en Supabase no hace
+--    perder los permisos, y el `on delete cascade` revoca el acceso solo al
+--    borrar la cuenta.
+--
+--    La tabla se queda SIN POLÍTICAS a propósito: con RLS activo y ninguna
+--    política, nadie la lee ni la escribe desde el navegador. Si un usuario
+--    cualquiera pudiera insertar aquí, se nombraría administrador a sí mismo.
+--    Desde el dashboard sí se gestiona: usa la llave secreta, que se salta RLS.
+--
+--    Ver el archivo 07_rls_solo_admin.sql para dar de alta y de baja.
+-- ----------------------------------------------------------------------------
+create table if not exists public.admins (
+  user_id    uuid        primary key references auth.users (id) on delete cascade,
+  note       text,
+  created_at timestamptz not null default now()
+);
+
+comment on table public.admins is
+  'Quién puede administrar. Se gestiona desde el dashboard; el navegador no la ve.';
+
+alter table public.admins enable row level security;
+revoke all on public.admins from anon, authenticated;
+
+-- `security definer` no es opcional: la tabla de arriba tiene RLS y ninguna
+-- política, así que una función normal no podría leerla y devolvería false para
+-- todo el mundo. Al ejecutarse como su dueño salta ese muro, que es justo lo que
+-- se busca: leer la lista sin exponerla. No hay recursión posible porque
+-- `admins` no tiene políticas que llamen a esta función.
+create or replace function public.is_admin()
+returns boolean
+language sql
+stable
+security definer
+set search_path = ''
+as $$
+  select exists (
+    select 1 from public.admins where user_id = (select auth.uid())
+  )
+$$;
+
+comment on function public.is_admin() is
+  'Cierto si quien llama está en public.admins. La usan todas las políticas.';
+
+-- El primer administrador. Sin esto, una instalación limpia nace sin nadie que
+-- pueda entrar al panel. Cambia el correo por el tuyo antes de ejecutar.
+insert into public.admins (user_id, note)
+select id, 'Dueño'
+from auth.users
+where email = 'alefito2012@gmail.com'
+on conflict (user_id) do nothing;
+
+
+-- ----------------------------------------------------------------------------
 -- 1. Tabla de platos
 -- ----------------------------------------------------------------------------
 create table if not exists public.dishes (
@@ -44,7 +100,7 @@ create index if not exists dishes_is_featured_idx
 
 -- ----------------------------------------------------------------------------
 -- 2. Row Level Security sobre dishes
---    Lectura pública · Escritura solo para usuarios autenticados
+--    Lectura pública · Escritura solo para el dueño (ver punto 0)
 -- ----------------------------------------------------------------------------
 alter table public.dishes enable row level security;
 
@@ -52,6 +108,9 @@ drop policy if exists "dishes_select_public"        on public.dishes;
 drop policy if exists "dishes_insert_authenticated" on public.dishes;
 drop policy if exists "dishes_update_authenticated" on public.dishes;
 drop policy if exists "dishes_delete_authenticated" on public.dishes;
+drop policy if exists "dishes_insert_admin"         on public.dishes;
+drop policy if exists "dishes_update_admin"         on public.dishes;
+drop policy if exists "dishes_delete_admin"         on public.dishes;
 
 -- Cualquiera puede leer. Se permite leer también los no disponibles porque el
 -- panel /admin usa la misma sesión anónima para el listado inicial; el filtro
@@ -61,21 +120,21 @@ create policy "dishes_select_public"
   to anon, authenticated
   using (true);
 
-create policy "dishes_insert_authenticated"
+create policy "dishes_insert_admin"
   on public.dishes for insert
   to authenticated
-  with check (true);
+  with check (public.is_admin());
 
-create policy "dishes_update_authenticated"
+create policy "dishes_update_admin"
   on public.dishes for update
   to authenticated
-  using (true)
-  with check (true);
+  using (public.is_admin())
+  with check (public.is_admin());
 
-create policy "dishes_delete_authenticated"
+create policy "dishes_delete_admin"
   on public.dishes for delete
   to authenticated
-  using (true);
+  using (public.is_admin());
 
 
 -- ----------------------------------------------------------------------------
@@ -95,17 +154,18 @@ alter table public.settings enable row level security;
 
 drop policy if exists "settings_select_public"        on public.settings;
 drop policy if exists "settings_update_authenticated" on public.settings;
+drop policy if exists "settings_update_admin"         on public.settings;
 
 create policy "settings_select_public"
   on public.settings for select
   to anon, authenticated
   using (true);
 
-create policy "settings_update_authenticated"
+create policy "settings_update_admin"
   on public.settings for update
   to authenticated
-  using (true)
-  with check (true);
+  using (public.is_admin())
+  with check (public.is_admin());
 
 
 -- ----------------------------------------------------------------------------
@@ -213,8 +273,9 @@ alter table public.order_items
 --    RLS. Así, releer los precios de `dishes` antes de guardar deja de ser una
 --    convención del formulario y pasa a ser la única puerta que existe.
 --
---    LEERLOS es solo para el dueño: contienen nombre, teléfono y dirección de
---    los clientes.
+--    LEERLOS es solo para el dueño, y eso significa la cuenta concreta que
+--    define `is_admin()` en el punto 0, no cualquiera que tenga sesión:
+--    contienen nombre, teléfono y dirección de los clientes.
 -- ----------------------------------------------------------------------------
 alter table public.orders      enable row level security;
 alter table public.order_items enable row level security;
@@ -223,42 +284,47 @@ drop policy if exists "orders_insert_public"         on public.orders;
 drop policy if exists "orders_select_authenticated"  on public.orders;
 drop policy if exists "orders_update_authenticated"  on public.orders;
 drop policy if exists "orders_delete_authenticated"  on public.orders;
+drop policy if exists "orders_select_admin"          on public.orders;
+drop policy if exists "orders_update_admin"          on public.orders;
+drop policy if exists "orders_delete_admin"          on public.orders;
 
 -- El `revoke` es redundante con la ausencia de política: deja la intención
 -- escrita también en los permisos, no solo en las reglas de RLS.
 revoke insert on public.orders from anon, authenticated;
 
-create policy "orders_select_authenticated"
+create policy "orders_select_admin"
   on public.orders for select
   to authenticated
-  using (true);
+  using (public.is_admin());
 
-create policy "orders_update_authenticated"
+create policy "orders_update_admin"
   on public.orders for update
   to authenticated
-  using (true)
-  with check (true);
+  using (public.is_admin())
+  with check (public.is_admin());
 
-create policy "orders_delete_authenticated"
+create policy "orders_delete_admin"
   on public.orders for delete
   to authenticated
-  using (true);
+  using (public.is_admin());
 
 drop policy if exists "order_items_insert_public"        on public.order_items;
 drop policy if exists "order_items_select_authenticated" on public.order_items;
 drop policy if exists "order_items_delete_authenticated" on public.order_items;
+drop policy if exists "order_items_select_admin"         on public.order_items;
+drop policy if exists "order_items_delete_admin"         on public.order_items;
 
 revoke insert on public.order_items from anon, authenticated;
 
-create policy "order_items_select_authenticated"
+create policy "order_items_select_admin"
   on public.order_items for select
   to authenticated
-  using (true);
+  using (public.is_admin());
 
-create policy "order_items_delete_authenticated"
+create policy "order_items_delete_admin"
   on public.order_items for delete
   to authenticated
-  using (true);
+  using (public.is_admin());
 
 
 -- ----------------------------------------------------------------------------
@@ -276,27 +342,30 @@ drop policy if exists "menu_images_select_public"        on storage.objects;
 drop policy if exists "menu_images_insert_authenticated" on storage.objects;
 drop policy if exists "menu_images_update_authenticated" on storage.objects;
 drop policy if exists "menu_images_delete_authenticated" on storage.objects;
+drop policy if exists "menu_images_insert_admin"         on storage.objects;
+drop policy if exists "menu_images_update_admin"         on storage.objects;
+drop policy if exists "menu_images_delete_admin"         on storage.objects;
 
 create policy "menu_images_select_public"
   on storage.objects for select
   to anon, authenticated
   using (bucket_id = 'menu-images');
 
-create policy "menu_images_insert_authenticated"
+create policy "menu_images_insert_admin"
   on storage.objects for insert
   to authenticated
-  with check (bucket_id = 'menu-images');
+  with check (bucket_id = 'menu-images' and public.is_admin());
 
-create policy "menu_images_update_authenticated"
+create policy "menu_images_update_admin"
   on storage.objects for update
   to authenticated
-  using (bucket_id = 'menu-images')
-  with check (bucket_id = 'menu-images');
+  using (bucket_id = 'menu-images' and public.is_admin())
+  with check (bucket_id = 'menu-images' and public.is_admin());
 
-create policy "menu_images_delete_authenticated"
+create policy "menu_images_delete_admin"
   on storage.objects for delete
   to authenticated
-  using (bucket_id = 'menu-images');
+  using (bucket_id = 'menu-images' and public.is_admin());
 
 
 -- ----------------------------------------------------------------------------

@@ -38,7 +38,9 @@ export type CustomerInfo = {
  */
 function paymentLine(customer: CustomerInfo, total: number): string | null {
   const method = customer.payment as PaymentMethod;
-  if (!(method in PAYMENT_LABELS)) return null;
+  // `in` también encuentra lo que hereda del prototipo ("constructor",
+  // "toString"), y esos no son métodos de pago.
+  if (!Object.hasOwn(PAYMENT_LABELS, method)) return null;
 
   const label = PAYMENT_LABELS[method];
   const bill = parseCashBill(customer);

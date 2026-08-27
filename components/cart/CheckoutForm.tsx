@@ -1,6 +1,6 @@
 "use client";
 
-import { ArrowLeft, Loader2 } from "lucide-react";
+import { AlertCircle, ArrowLeft, Loader2 } from "lucide-react";
 import { useState, type FormEvent } from "react";
 
 import { saveOrder } from "@/app/actions/orders";
@@ -39,6 +39,23 @@ const EMPTY: CustomerInfo = {
 /** Más allá de esto se sigue adelante sin esperar a que termine el registro. */
 const SAVE_TIMEOUT_MS = 3000;
 
+/** Qué pasó al registrar el pedido. `error` en null es que quedó guardado. */
+type SaveOutcome = { error: string | null };
+
+/**
+ * Pedido que ya salió por WhatsApp y cuyo registro falló.
+ *
+ * Guarda el código del envío original porque reintentar tiene que reescribir
+ * ESE pedido: con un código nuevo, el dueño se quedaría con uno en el chat que
+ * no existe en el panel.
+ */
+type PendingOrder = {
+  code: string;
+  customer: CustomerInfo;
+  items: CartItem[];
+  error: string;
+};
+
 /** Ids fijos: hacen falta para poder enfocar el primer campo que falle. */
 const FIELD_IDS: Record<FieldName, string> = {
   name: "checkout-name",
@@ -64,13 +81,15 @@ const FIELD_ORDER: FieldName[] = [
  *
  * Agotar la espera no cancela nada — la petición sigue viva en el navegador y
  * el pedido acaba guardándose — y el mensaje de WhatsApp ya lleva el código,
- * así que el chat y el panel coinciden aunque aquí no se llegue a esperar.
+ * así que el chat y el panel coinciden aunque aquí no se llegue a esperar. Por
+ * eso el timeout se devuelve como éxito: avisar de un fallo que casi seguro no
+ * ocurrió sería peor que callarlo. Solo se reporta lo que falló de verdad.
  */
 async function saveWithTimeout(
   items: CartItem[],
   customer: CustomerInfo,
   code: string,
-): Promise<void> {
+): Promise<SaveOutcome> {
   const save = saveOrder({
     items: items.map((item) => ({ id: item.id, quantity: item.quantity })),
     code,
@@ -81,18 +100,20 @@ async function saveWithTimeout(
     payment: customer.payment,
     cashBill: customer.cashBill,
   })
-    .then((result) => {
+    .then((result): SaveOutcome => {
       if (result.error) console.error("[pedido]", result.error);
+      return { error: result.error };
     })
-    .catch((error: unknown) => {
+    .catch((error: unknown): SaveOutcome => {
       console.error("[pedido]", error);
+      return { error: "No se pudo conectar para registrar el pedido." };
     });
 
-  const timeout = new Promise<void>((resolve) =>
-    setTimeout(resolve, SAVE_TIMEOUT_MS),
+  const timeout = new Promise<SaveOutcome>((resolve) =>
+    setTimeout(() => resolve({ error: null }), SAVE_TIMEOUT_MS),
   );
 
-  await Promise.race([save, timeout]);
+  return Promise.race([save, timeout]);
 }
 
 export function CheckoutForm({
@@ -112,6 +133,7 @@ export function CheckoutForm({
     {},
   );
   const [sending, setSending] = useState(false);
+  const [pending, setPending] = useState<PendingOrder | null>(null);
 
   const update =
     (field: keyof CustomerInfo) =>
@@ -150,6 +172,9 @@ export function CheckoutForm({
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (items.length === 0 || sending) return;
+    // Con un envío ya hecho y pendiente de registro, reenviar generaría un
+    // código nuevo y le mandaría al dueño el mismo pedido por segunda vez.
+    if (pending) return;
 
     // La validación va aquí, antes de `setSending` y sobre todo antes de abrir
     // la pestaña: si no, se abriría WhatsApp con datos que no sirven.
@@ -183,14 +208,20 @@ export function CheckoutForm({
     const clean = cleanCustomer(customer);
     const url = buildOrderUrl(snapshot, clean, deliveryFee, code);
 
+    // Con pestaña nueva se navega ya y el registro ocurre detrás, sin que el
+    // cliente espere a la base. Sin ella (popup bloqueado, lo habitual en los
+    // WebView de Instagram y Facebook) hay que invertirlo: navegar esta misma
+    // pestaña descarga el documento y cancela la petición en vuelo, así que el
+    // pedido se perdería aunque el mensaje sí llegase.
+    let outcome: SaveOutcome;
     if (tab) {
       tab.location.href = url;
       tab.opener = null;
+      outcome = await saveWithTimeout(snapshot, clean, code);
     } else {
+      outcome = await saveWithTimeout(snapshot, clean, code);
       window.location.href = url;
     }
-
-    await saveWithTimeout(snapshot, clean, code);
 
     trackEvent("pedido_enviado", {
       total: sumItems(snapshot) + deliveryFee,
@@ -198,6 +229,50 @@ export function CheckoutForm({
       code,
     });
 
+    // El carrito no se vacía si el registro falló: `CartDrawer` solo monta este
+    // formulario mientras queden platos, así que vaciarlo se llevaría por
+    // delante el aviso antes de que nadie llegue a leerlo.
+    if (outcome.error) {
+      setPending({
+        code,
+        customer: clean,
+        items: snapshot,
+        error: outcome.error,
+      });
+      setSending(false);
+      return;
+    }
+
+    clear();
+    closeCart();
+  }
+
+  /**
+   * Reintenta solo el registro, con el código del envío original y sin volver a
+   * abrir WhatsApp: el dueño ya tiene el mensaje y no debe recibirlo dos veces.
+   */
+  async function handleRetry() {
+    if (!pending || sending) return;
+    setSending(true);
+
+    const outcome = await saveWithTimeout(
+      pending.items,
+      pending.customer,
+      pending.code,
+    );
+
+    if (outcome.error) {
+      setPending({ ...pending, error: outcome.error });
+      setSending(false);
+      return;
+    }
+
+    clear();
+    closeCart();
+  }
+
+  /** El pedido ya está en el chat: se da por resuelto y se suelta el carrito. */
+  function dismissPending() {
     clear();
     closeCart();
   }
@@ -333,16 +408,48 @@ export function CheckoutForm({
 
       <footer className="border-t border-dark/10 bg-white p-5">
         <OrderTotals subtotal={sumItems(items)} deliveryFee={deliveryFee} />
-        <Button
-          type="submit"
-          variant="whatsapp"
-          size="lg"
-          className="mt-4 w-full"
-          disabled={sending}
-        >
-          {sending && <Loader2 size={18} className="animate-spin" />}
-          {sending ? "Enviando…" : "Enviar pedido por WhatsApp"}
-        </Button>
+
+        {pending ? (
+          <div className="mt-4 space-y-3">
+            {/* Ámbar y no rojo: el pedido sí le llegó al dueño por WhatsApp.
+                Lo único que falló es que quedara registrado en el panel. */}
+            <p className="flex items-start gap-2 rounded-lg bg-amber-50 p-3 text-sm text-amber-800">
+              <AlertCircle size={18} className="mt-0.5 shrink-0" />
+              <span>
+                Tu pedido <strong>#{pending.code}</strong> ya salió por
+                WhatsApp, pero no quedó guardado en el panel. {pending.error}
+              </span>
+            </p>
+            <Button
+              type="button"
+              size="lg"
+              className="w-full"
+              disabled={sending}
+              onClick={handleRetry}
+            >
+              {sending && <Loader2 size={18} className="animate-spin" />}
+              {sending ? "Reintentando…" : "Reintentar registro"}
+            </Button>
+            <button
+              type="button"
+              onClick={dismissPending}
+              className="w-full text-sm font-semibold text-dark/60 transition-colors hover:text-primary"
+            >
+              Ya lo confirmé por WhatsApp
+            </button>
+          </div>
+        ) : (
+          <Button
+            type="submit"
+            variant="whatsapp"
+            size="lg"
+            className="mt-4 w-full"
+            disabled={sending}
+          >
+            {sending && <Loader2 size={18} className="animate-spin" />}
+            {sending ? "Enviando…" : "Enviar pedido por WhatsApp"}
+          </Button>
+        )}
       </footer>
     </form>
   );

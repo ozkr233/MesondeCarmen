@@ -23,7 +23,7 @@ export default function LoginPage() {
 function LoginForm() {
   const router = useRouter();
   const searchParams = useSearchParams();
-  const redirectTo = searchParams.get("redirect") ?? "/admin";
+  const redirectTo = safeRedirect(searchParams.get("redirect"));
 
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -116,6 +116,20 @@ function LoginForm() {
       </div>
     </main>
   );
+}
+
+/**
+ * A dónde llevar tras entrar. El parámetro viene de la URL, así que solo se
+ * aceptan rutas de este sitio: un "?redirect=https://…" mandaría al dueño a un
+ * panel clonado justo después de escribir la contraseña.
+ *
+ * No basta con mirar el primer carácter: "//evil.com" y "/\evil.com" empiezan
+ * por "/" y el navegador los resuelve igualmente como otro origen.
+ */
+function safeRedirect(value: string | null): string {
+  if (!value || !value.startsWith("/")) return "/admin";
+  if (value.startsWith("//") || value.startsWith("/\\")) return "/admin";
+  return value;
 }
 
 function translateAuthError(message: string): string {
