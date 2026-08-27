@@ -10,10 +10,10 @@ import { Input, Textarea } from "@/components/ui/Input";
 import { Modal } from "@/components/ui/Modal";
 import { Select } from "@/components/ui/Select";
 import { DEFAULT_CATEGORY } from "@/lib/categories";
+import { MENU_IMAGES_BUCKET as BUCKET } from "@/lib/storage";
 import { createClient } from "@/utils/supabase/client";
 import type { Dish } from "@/types/dish";
 
-const BUCKET = "menu-images";
 const MAX_IMAGE_BYTES = 5 * 1024 * 1024;
 
 /** Valor centinela del desplegable que abre el campo de categoría nueva. */
@@ -147,8 +147,13 @@ function DishFormBody({
   /**
    * La imagen se sube desde el navegador (no por Server Action) porque el
    * cuerpo de una Server Action está limitado a ~1 MB y una foto lo supera.
+   *
+   * Devuelve también la ruta dentro del bucket: si el guardado posterior falla,
+   * es lo único que permite volver atrás y borrar el archivo recién subido.
    */
-  async function uploadImage(selected: File): Promise<string> {
+  async function uploadImage(
+    selected: File,
+  ): Promise<{ path: string; publicUrl: string }> {
     const supabase = createClient();
     const extension = selected.name.split(".").pop()?.toLowerCase() || "jpg";
     const path = `${crypto.randomUUID()}.${extension}`;
@@ -166,7 +171,7 @@ function DishFormBody({
     }
 
     const { data } = supabase.storage.from(BUCKET).getPublicUrl(path);
-    return data.publicUrl;
+    return { path, publicUrl: data.publicUrl };
   }
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
@@ -182,8 +187,18 @@ function DishFormBody({
     setSaving(true);
     setError(null);
 
+    // La subida y el guardado son dos escrituras distintas: si la primera va
+    // bien y la segunda no, el archivo se queda en el bucket sin ninguna fila
+    // que lo referencie. Se anota aquí para poder deshacerla.
+    let uploadedPath: string | null = null;
+
     try {
-      const imageUrl = file ? await uploadImage(file) : currentImage;
+      let imageUrl = currentImage;
+      if (file) {
+        const uploaded = await uploadImage(file);
+        uploadedPath = uploaded.path;
+        imageUrl = uploaded.publicUrl;
+      }
 
       const payload: DishInput = {
         name: form.name,
@@ -203,6 +218,9 @@ function DishFormBody({
         setError(result.error);
         return;
       }
+
+      // La fila ya apunta al archivo: deja de ser un huérfano en potencia.
+      uploadedPath = null;
       onSaved();
     } catch (caught) {
       setError(
@@ -211,6 +229,14 @@ function DishFormBody({
           : "Ocurrió un error al guardar.",
       );
     } finally {
+      if (uploadedPath) {
+        // Best effort y sin propagar: el error que le importa al usuario ya
+        // está en pantalla, y el RLS del bucket deja borrar a `authenticated`.
+        await createClient()
+          .storage.from(BUCKET)
+          .remove([uploadedPath])
+          .catch(() => {});
+      }
       setSaving(false);
     }
   }

@@ -3,6 +3,10 @@
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 
+import {
+  MENU_IMAGES_BUCKET as BUCKET,
+  storagePathFromUrl,
+} from "@/lib/storage";
 import { createClient } from "@/utils/supabase/server";
 
 export type DishInput = {
@@ -21,8 +25,6 @@ export type ActionResult = { error: string | null };
 export type DishFlag = "is_available" | "is_featured";
 
 const DISH_FLAGS: readonly DishFlag[] = ["is_available", "is_featured"];
-
-const BUCKET = "menu-images";
 
 /** Tope de una acción en lote. Más que esto no cabe en una pantalla. */
 const MAX_BULK = 200;
@@ -85,11 +87,28 @@ export async function updateDish(
   if (invalid) return { error: invalid };
 
   const supabase = await requireSession();
-  const { error } = await supabase
+
+  // La foto anterior se lee antes de pisarla: una vez escrita la fila nueva ya
+  // no habría forma de saber qué archivo dejó de estar referenciado.
+  const { data: previous } = await supabase
     .from("dishes")
-    .update(clean(input))
-    .eq("id", id);
+    .select("image_url")
+    .eq("id", id)
+    .maybeSingle();
+
+  const next = clean(input);
+  const { error } = await supabase.from("dishes").update(next).eq("id", id);
   if (error) return { error: error.message };
+
+  // Se comparan rutas y no URLs, y solo después de que la escritura haya ido
+  // bien: si el update falla, la fila sigue apuntando a la foto vieja. Guardar
+  // sin tocar la imagen manda la misma URL, y ahí no hay nada que borrar.
+  const oldPath = storagePathFromUrl(previous?.image_url ?? null);
+  const newPath = storagePathFromUrl(next.image_url);
+  if (oldPath && oldPath !== newPath) {
+    // Best effort: si falla, la fila ya se guardó y solo queda un huérfano.
+    await supabase.storage.from(BUCKET).remove([oldPath]);
+  }
 
   refresh();
   return { error: null };
@@ -289,17 +308,4 @@ export async function signOut() {
   await supabase.auth.signOut();
   revalidatePath("/admin");
   redirect("/admin/login");
-}
-
-/**
- * Extrae la ruta dentro del bucket de una URL pública de Supabase Storage.
- * Devuelve null para imágenes externas, que no nos toca borrar.
- */
-function storagePathFromUrl(url: string | null): string | null {
-  if (!url) return null;
-  const marker = `/storage/v1/object/public/${BUCKET}/`;
-  const index = url.indexOf(marker);
-  if (index === -1) return null;
-  const path = url.slice(index + marker.length).split("?")[0];
-  return path ? decodeURIComponent(path) : null;
 }
