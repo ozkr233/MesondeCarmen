@@ -6,6 +6,7 @@ import { usePathname } from "next/navigation";
 const LINKS = [
   { href: "/admin", label: "Platos" },
   { href: "/admin/pedidos", label: "Pedidos" },
+  { href: "/admin/equipo", label: "Equipo" },
 ] as const;
 
 /** Navegación del panel. Cliente solo por el resaltado de la sección activa. */
