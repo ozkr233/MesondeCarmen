@@ -78,8 +78,13 @@ function translateCreateError(message: string): string {
   if (/already been registered|already exists/i.test(message)) {
     return "Ya existe una cuenta con ese correo.";
   }
+  // Con la protección de contraseñas filtradas activada, Supabase rechaza
+  // también las que aparecen en brechas conocidas, no solo las cortas.
+  if (/pwned|breach|compromis|weak/i.test(message)) {
+    return "Esa contraseña aparece en filtraciones conocidas. Elige otra.";
+  }
   if (/password/i.test(message)) {
-    return "Supabase rechazó la contraseña. Prueba con una más larga.";
+    return "Supabase rechazó la contraseña. Prueba con otra más larga.";
   }
   return message;
 }
