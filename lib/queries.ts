@@ -1,5 +1,6 @@
 import "server-only";
 
+import { resolveDishRef } from "@/lib/deeplink";
 import { compareCategories } from "@/lib/site";
 import { normalizeDish, type Dish, type Settings } from "@/types/dish";
 import { createClient } from "@/utils/supabase/server";
@@ -52,6 +53,18 @@ export async function getAvailableDishes(): Promise<Dish[]> {
     return [];
   }
   return sortForMenu(((data as Dish[] | null) ?? []).map(normalizeDish));
+}
+
+/**
+ * El plato al que apunta un enlace compartido (`/carta?plato=...`). Busca solo
+ * entre los disponibles: un enlace a un plato agotado no debe llenar el carrito
+ * con algo que no se puede pedir.
+ *
+ * La carta cabe de sobra en memoria, así que sale más barato traerla y comparar
+ * aquí que pedirle a Postgres que normalice nombres sin tildes.
+ */
+export async function findDishByRef(ref: string): Promise<Dish | null> {
+  return resolveDishRef(await getAvailableDishes(), ref);
 }
 
 /** Todos los platos, incluidos los agotados. Solo para el panel. */

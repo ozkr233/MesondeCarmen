@@ -7,18 +7,26 @@ import { Hero } from "@/components/site/Hero";
 import { JsonLd } from "@/components/site/JsonLd";
 import { LocationSection } from "@/components/site/LocationSection";
 import { WhyUs } from "@/components/site/WhyUs";
-import { getFeaturedDishes, getSettings } from "@/lib/queries";
+import { DEEPLINK_PARAM, deepLinkRef } from "@/lib/deeplink";
+import { findDishByRef, getFeaturedDishes, getSettings } from "@/lib/queries";
 import { restaurantSchema, websiteSchema } from "@/lib/seo";
 
 export const metadata: Metadata = {
   alternates: { canonical: "/" },
 };
 
-export default async function HomePage() {
-  const [dishes, settings] = await Promise.all([
+export default async function HomePage({ searchParams }: PageProps<"/">) {
+  const [dishes, settings, params] = await Promise.all([
     getFeaturedDishes(),
     getSettings(),
+    searchParams,
   ]);
+
+  // La portada solo trae los destacados, así que el plato del enlace hay que
+  // buscarlo aparte — y solo cuando el enlace trae uno, para que la visita
+  // normal no pague una consulta de más.
+  const ref = deepLinkRef(params[DEEPLINK_PARAM]);
+  const deepLinkDish = ref ? await findDishByRef(ref) : null;
 
   return (
     <>
@@ -30,7 +38,10 @@ export default async function HomePage() {
       <WhyUs />
       <LocationSection />
       <Footer />
-      <FloatingActions deliveryFee={settings.deliveryFee} />
+      <FloatingActions
+        deliveryFee={settings.deliveryFee}
+        deepLinkDish={deepLinkDish}
+      />
     </>
   );
 }

@@ -13,11 +13,26 @@ export function stripDiacritics(text: string): string {
   return text.toLowerCase().normalize("NFD").replace(DIACRITICS, "");
 }
 
-/** Ancla estable para los enlaces de CategoryNav ("Platos Fuertes" → "platos-fuertes"). */
-export function categorySlug(category: string): string {
-  return stripDiacritics(category)
+/** Sin tildes, en minúsculas y con guiones: "Platos Fuertes" → "platos-fuertes". */
+export function slugify(text: string): string {
+  return stripDiacritics(text)
     .replace(/[^a-z0-9]+/g, "-")
     .replace(/^-|-$/g, "");
+}
+
+/** Ancla estable para los enlaces de CategoryNav ("Platos Fuertes" → "platos-fuertes"). */
+export function categorySlug(category: string): string {
+  return slugify(category);
+}
+
+/**
+ * Identificador del plato para los enlaces que se comparten
+ * ("Arroz de Camarón" → "arroz-de-camaron"). Se deriva del nombre, así que
+ * renombrar el plato invalida sus enlaces: `lib/deeplink.ts` acepta también el
+ * uuid como respaldo permanente.
+ */
+export function dishSlug(name: string): string {
+  return slugify(name);
 }
 
 /** Agrupa los platos por categoría respetando el orden de la carta. */

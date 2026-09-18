@@ -20,6 +20,12 @@ export type WhatsAppOrigin =
 type Events = {
   /** El visitante agregó un plato al carrito. */
   carrito_agregado: { plato: string };
+  /**
+   * Llegó por un enlace compartido (`/carta?plato=...`) y el plato entró solo
+   * al carrito. Separado de `carrito_agregado` para poder medir qué enlace
+   * compartido convierte.
+   */
+  carrito_deeplink: { plato: string };
   /** Pasó del carrito al formulario de datos. */
   checkout_iniciado: { total: number; items: number };
   /**

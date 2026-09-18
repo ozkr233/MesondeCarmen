@@ -4,7 +4,9 @@ import {
   ArrowDown,
   ArrowUp,
   ArrowUpDown,
+  Check,
   Copy,
+  Link2,
   Pencil,
   Plus,
   Search,
@@ -15,7 +17,14 @@ import {
 } from "lucide-react";
 import Image from "next/image";
 import { useRouter } from "next/navigation";
-import { useMemo, useOptimistic, useState, useTransition } from "react";
+import {
+  useEffect,
+  useMemo,
+  useOptimistic,
+  useRef,
+  useState,
+  useTransition,
+} from "react";
 
 import {
   bulkDeleteDishes,
@@ -34,6 +43,7 @@ import { Input } from "@/components/ui/Input";
 import { Select } from "@/components/ui/Select";
 import { Switch } from "@/components/ui/Switch";
 import { categoryOptions } from "@/lib/categories";
+import { dishDeepLink } from "@/lib/deeplink";
 import { formatCOP } from "@/lib/format";
 import { compareCategories } from "@/lib/site";
 import type { Dish } from "@/types/dish";
@@ -75,6 +85,14 @@ export function DishTable({ dishes }: { dishes: Dish[] }) {
   const [featured, setFeatured] = useState<TriState>("todos");
   const [sort, setSort] = useState<Sort>(null);
   const [selected, setSelected] = useState<ReadonlySet<string>>(new Set());
+  const [copiedId, setCopiedId] = useState<string | null>(null);
+  const copiedTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  useEffect(() => {
+    return () => {
+      if (copiedTimer.current) clearTimeout(copiedTimer.current);
+    };
+  }, []);
 
   const categories = useMemo(() => categoryOptions(dishes), [dishes]);
 
@@ -149,6 +167,23 @@ export function DishTable({ dishes }: { dishes: Dish[] }) {
   function openEdit(dish: Dish) {
     setEditing(dish);
     setFormOpen(true);
+  }
+
+  /**
+   * Copia el enlace que abre la web con el plato ya en el carrito. El
+   * portapapeles solo existe en HTTPS o en localhost, así que si falla se
+   * muestra la URL para copiarla a mano en vez de dejar al usuario sin nada.
+   */
+  async function copyLink(dish: Dish) {
+    const url = dishDeepLink(dish);
+    try {
+      await navigator.clipboard.writeText(url);
+      setCopiedId(dish.id);
+      if (copiedTimer.current) clearTimeout(copiedTimer.current);
+      copiedTimer.current = setTimeout(() => setCopiedId(null), 1600);
+    } catch {
+      window.prompt(`Copia el enlace de ${dish.name}:`, url);
+    }
   }
 
   function toggleSelected(id: string) {
@@ -552,6 +587,22 @@ export function DishTable({ dishes }: { dishes: Dish[] }) {
                             disabled={pending}
                           >
                             <Pencil size={16} />
+                          </IconAction>
+                          <IconAction
+                            label={
+                              copiedId === dish.id
+                                ? "Enlace copiado"
+                                : `Copiar enlace de ${dish.name}`
+                            }
+                            // No es una Server Action: no hay razón para
+                            // bloquearlo mientras otra acción está en vuelo.
+                            onClick={() => void copyLink(dish)}
+                          >
+                            {copiedId === dish.id ? (
+                              <Check size={16} className="text-green-600" />
+                            ) : (
+                              <Link2 size={16} />
+                            )}
                           </IconAction>
                           <IconAction
                             label={`Duplicar ${dish.name}`}
