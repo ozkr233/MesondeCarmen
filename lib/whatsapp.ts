@@ -1,7 +1,8 @@
 import { formatCOP } from "@/lib/format";
+import { portionLabel } from "@/lib/portions";
 import { site } from "@/lib/site";
 import { parseCashBill, PAYMENT_LABELS, type PaymentMethod } from "@/lib/validation";
-import { sumItems } from "@/store/cart";
+import { lineTotal, sumItems } from "@/store/cart";
 import type { CartItem } from "@/types/dish";
 
 /**
@@ -73,10 +74,13 @@ export function buildOrderMessage(
   deliveryFee = 0,
   code?: string | null,
 ): string {
-  const lines = items.map(
-    (item) =>
-      `• ${item.quantity} x ${item.name} — ${formatCOP(item.price * item.quantity)}`,
-  );
+  // La porción va pegada al nombre porque es parte de lo que hay que cocinar,
+  // no un detalle del precio. Los platos que no se venden por porción salen
+  // exactamente igual que antes.
+  const lines = items.map((item) => {
+    const portion = item.portion ? ` (${portionLabel(item.portion)})` : "";
+    return `• ${item.quantity} x ${item.name}${portion} — ${formatCOP(lineTotal(item))}`;
+  });
 
   const subtotal = sumItems(items);
 

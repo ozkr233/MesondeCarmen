@@ -81,13 +81,36 @@ create table if not exists public.dishes (
   image_url    text,
   is_available boolean       not null default true,
   is_featured  boolean       not null default false,
+  -- Si el plato se vende por porciones y a qué precio cada una:
+  --   [{"people": 2, "price": 30000}, {"people": 4, "price": 55000}]
+  -- El precio de cada porción lo escribe el dueño; no se deriva de `price`.
+  -- El interruptor va aparte de la lista para poder apagar la función sin
+  -- perder los precios ya escritos.
+  has_portions boolean       not null default false,
+  portions     jsonb         not null default '[]'::jsonb,
+  -- Posición en la portada, que se ordena por esta columna y desempata por
+  -- `created_at`. En 0 están los que nadie ha movido todavía: con todos
+  -- empatados, la portada sale por antigüedad, como salía antes de que esto
+  -- existiera.
+  featured_order smallint    not null default 0,
   created_at   timestamptz   not null default now()
 );
 
 -- `add column if not exists` para las bases que se crearon antes de que
--- existieran los destacados.
+-- existieran los destacados y las porciones.
 alter table public.dishes
-  add column if not exists is_featured boolean not null default false;
+  add column if not exists is_featured    boolean  not null default false,
+  add column if not exists has_portions   boolean  not null default false,
+  add column if not exists portions       jsonb    not null default '[]'::jsonb,
+  add column if not exists featured_order smallint not null default 0;
+
+-- Solo acota la forma; enteros, duplicados y precios los valida
+-- `validatePortions` en las acciones de /admin, que son la única puerta de
+-- escritura de esta columna.
+alter table public.dishes drop constraint if exists dishes_portions_shape;
+alter table public.dishes
+  add constraint dishes_portions_shape
+    check (jsonb_typeof(portions) = 'array' and jsonb_array_length(portions) <= 8);
 
 create index if not exists dishes_category_idx     on public.dishes (category);
 create index if not exists dishes_is_available_idx on public.dishes (is_available);
@@ -246,16 +269,25 @@ create table if not exists public.order_items (
   order_id   uuid          not null references public.orders (id) on delete cascade,
   dish_id    uuid          references public.dishes (id) on delete set null,
   name       text          not null,
+  -- Lo que cuesta UNA unidad de lo que se pidió: en un plato con porciones, el
+  -- precio de la porción. Así el total de la línea sigue siendo
+  -- unit_price × quantity sin que el panel sepa nada de porciones.
   unit_price numeric(10,2) not null default 0,
-  quantity   integer       not null default 1 check (quantity > 0)
+  quantity   integer       not null default 1 check (quantity > 0),
+  -- Personas de la porción pedida. null = no aplica (plato sin porciones, o
+  -- pedido anterior a que existieran).
+  portion    smallint
 );
 
 create index if not exists order_items_order_id_idx on public.order_items (order_id);
 create index if not exists order_items_dish_id_idx  on public.order_items (dish_id);
 
+alter table public.order_items add column if not exists portion smallint;
+
 alter table public.order_items drop constraint if exists order_items_name_len;
 alter table public.order_items drop constraint if exists order_items_unit_price_positive;
 alter table public.order_items drop constraint if exists order_items_quantity_max;
+alter table public.order_items drop constraint if exists order_items_portion_valid;
 
 alter table public.order_items
   add constraint order_items_name_len
@@ -263,7 +295,10 @@ alter table public.order_items
   add constraint order_items_unit_price_positive
     check (unit_price >= 0),
   add constraint order_items_quantity_max
-    check (quantity <= 99);
+    check (quantity <= 99),
+  -- El tope tiene que seguir a MAX_PEOPLE en lib/portions.ts.
+  add constraint order_items_portion_valid
+    check (portion is null or portion between 1 and 20);
 
 
 -- ----------------------------------------------------------------------------

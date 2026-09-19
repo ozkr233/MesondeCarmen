@@ -45,10 +45,24 @@ import { Switch } from "@/components/ui/Switch";
 import { categoryOptions } from "@/lib/categories";
 import { dishDeepLink } from "@/lib/deeplink";
 import { formatCOP } from "@/lib/format";
-import { compareCategories } from "@/lib/site";
+import { menuPrice } from "@/lib/portions";
+import { compareCategories, FEATURED_LIMIT } from "@/lib/site";
 import type { Dish } from "@/types/dish";
 
 type FlagChange = { ids: string[]; field: DishFlag; value: boolean };
+
+/** El precio de la carta, "Desde" incluido: el panel no debe contradecirla. */
+function DishPrice({ dish }: { dish: Dish }) {
+  const price = menuPrice(dish);
+  return (
+    <>
+      {price.from && (
+        <span className="mr-1 text-xs font-semibold text-dark/45">Desde</span>
+      )}
+      {formatCOP(price.amount)}
+    </>
+  );
+}
 
 /** Filtros de sí/no que comparten las columnas de banderas. */
 type TriState = "todos" | "si" | "no";
@@ -118,7 +132,9 @@ export function DishTable({ dishes }: { dishes: Dish[] }) {
     return [...filtered].sort((a, b) => {
       switch (sort.key) {
         case "price":
-          return (a.price - b.price) * factor;
+          // El mismo precio que muestra la columna, o los platos con porciones
+          // se ordenarían por una cifra que la tabla no enseña.
+          return (menuPrice(a).amount - menuPrice(b).amount) * factor;
         case "category":
           return (
             compareCategories(a.category, b.category) * factor ||
@@ -291,10 +307,11 @@ export function DishTable({ dishes }: { dishes: Dish[] }) {
         </Button>
       </div>
 
-      {featuredCount > 3 && (
+      {featuredCount > FEATURED_LIMIT && (
         <p className="mb-4 rounded-lg bg-amber-50 p-3 text-sm text-amber-800">
-          Tienes {featuredCount} platos destacados, pero la portada solo muestra
-          los 3 más antiguos. Desmarca alguno para elegir cuáles salen.
+          Tienes {featuredCount} platos destacados, pero la portada solo muestra{" "}
+          {FEATURED_LIMIT}. Cuáles salen y en qué orden se decide arriba, en
+          «Orden de la portada».
         </p>
       )}
 
@@ -544,7 +561,7 @@ export function DishTable({ dishes }: { dishes: Dish[] }) {
                         {dish.category}
                       </td>
                       <td className="whitespace-nowrap px-4 py-3 font-bold text-primary">
-                        {formatCOP(dish.price)}
+                        <DishPrice dish={dish} />
                       </td>
                       <td className="px-4 py-3">
                         <div className="flex justify-center">

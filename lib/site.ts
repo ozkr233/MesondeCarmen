@@ -59,6 +59,15 @@ export const site = {
 } as const;
 
 /**
+ * Cuántos platos destacados caben en la portada. La rejilla de `MenuSection`
+ * es de tres columnas, así que cambiar esto sin tocarla deja una fila coja.
+ *
+ * Vive aquí y no en `lib/queries.ts` porque el panel también lo necesita para
+ * dibujar dónde corta la portada, y aquel módulo es `server-only`.
+ */
+export const FEATURED_LIMIT = 3;
+
+/**
  * Orden en que se muestran las categorías en la carta. Sin esto se ordenarían
  * alfabéticamente y las bebidas saldrían antes que los platos fuertes.
  * Las categorías que no estén aquí van al final, en orden alfabético.

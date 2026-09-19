@@ -1,6 +1,6 @@
 "use client";
 
-import { Minus, Plus, ShoppingCart, Trash2, X } from "lucide-react";
+import { ChevronDown, Minus, Plus, ShoppingCart, Trash2, X } from "lucide-react";
 import Image from "next/image";
 import { useEffect, useState } from "react";
 
@@ -9,8 +9,10 @@ import { OrderTotals } from "@/components/cart/OrderTotals";
 import { Button } from "@/components/ui/Button";
 import { trackEvent } from "@/lib/analytics";
 import { formatCOP } from "@/lib/format";
+import { peopleLabel } from "@/lib/portions";
 import { MAX_QUANTITY } from "@/lib/validation";
-import { countItems, sumItems, useCart } from "@/store/cart";
+import { countItems, lineTotal, sumItems, useCart } from "@/store/cart";
+import type { CartItem } from "@/types/dish";
 
 export function CartDrawer({ deliveryFee }: { deliveryFee: number }) {
   const isOpen = useCart((state) => state.isOpen);
@@ -27,6 +29,7 @@ function CartPanel({ deliveryFee }: { deliveryFee: number }) {
   const items = useCart((state) => state.items);
   const setQuantity = useCart((state) => state.setQuantity);
   const removeItem = useCart((state) => state.removeItem);
+  const setPortion = useCart((state) => state.setPortion);
 
   const [requestedStep, setRequestedStep] = useState<"cart" | "checkout">(
     "cart",
@@ -119,7 +122,7 @@ function CartPanel({ deliveryFee }: { deliveryFee: number }) {
                     )}
                   </div>
 
-                  <div className="flex min-w-0 flex-1 flex-col justify-between">
+                  <div className="flex min-w-0 flex-1 flex-col gap-1.5">
                     <div className="flex items-start justify-between gap-2">
                       <p className="font-bold leading-tight text-dark">
                         {item.name}
@@ -134,7 +137,18 @@ function CartPanel({ deliveryFee }: { deliveryFee: number }) {
                       </button>
                     </div>
 
-                    <div className="flex items-center justify-between">
+                    {/* Solo los platos que se venden por porción; el resto de
+                        la línea no cambia. */}
+                    {item.portions.length > 0 && (
+                      <PortionSelect
+                        item={item}
+                        onChange={(people) => setPortion(item.id, people)}
+                      />
+                    )}
+
+                    {/* `mt-auto` mantiene esta fila pegada abajo, alineada con
+                        el pie de la miniatura, haya selector o no. */}
+                    <div className="mt-auto flex items-center justify-between">
                       <div className="flex items-center gap-1 rounded-lg border border-dark/10">
                         <QtyButton
                           label={`Quitar una unidad de ${item.name}`}
@@ -159,7 +173,7 @@ function CartPanel({ deliveryFee }: { deliveryFee: number }) {
                         </QtyButton>
                       </div>
                       <span className="font-bold text-primary">
-                        {formatCOP(item.price * item.quantity)}
+                        {formatCOP(lineTotal(item))}
                       </span>
                     </div>
                   </div>
@@ -193,6 +207,50 @@ function CartPanel({ deliveryFee }: { deliveryFee: number }) {
         )}
       </aside>
     </div>
+  );
+}
+
+/**
+ * Selector de porción de una línea. `<select>` nativo y compacto en vez del
+ * `Select` de ui/, que trae etiqueta y ancho de campo de formulario y no cabría
+ * aquí. Nativo por lo mismo que explica aquel componente: en el móvil abre el
+ * selector del sistema, que es lo que espera quien pide desde el teléfono.
+ *
+ * Cada opción lleva su precio porque es el dato con el que se decide el tamaño.
+ */
+function PortionSelect({
+  item,
+  onChange,
+}: {
+  item: CartItem;
+  onChange: (people: number) => void;
+}) {
+  return (
+    <label className="flex items-center gap-1.5 text-xs text-dark/60">
+      Porción para
+      <span className="relative">
+        <select
+          value={item.portion ?? ""}
+          onChange={(event) => onChange(Number(event.target.value))}
+          // El nombre del plato va en la etiqueta accesible: en un carrito con
+          // varios arroces, "Porción para" a secas no distingue un selector de
+          // otro.
+          aria-label={`Porción para ${item.name}`}
+          className="appearance-none rounded-md border border-dark/15 bg-white py-1 pl-2 pr-6 text-xs font-semibold text-dark"
+        >
+          {item.portions.map((portion) => (
+            <option key={portion.people} value={portion.people}>
+              {peopleLabel(portion.people)} · {formatCOP(portion.price)}
+            </option>
+          ))}
+        </select>
+        <ChevronDown
+          size={12}
+          aria-hidden
+          className="pointer-events-none absolute right-1.5 top-1/2 -translate-y-1/2 text-dark/40"
+        />
+      </span>
+    </label>
   );
 }
 

@@ -7,12 +7,17 @@ import { useEffect, useRef, useState } from "react";
 import { Button } from "@/components/ui/Button";
 import { trackEvent } from "@/lib/analytics";
 import { formatCOP } from "@/lib/format";
+import { menuPrice } from "@/lib/portions";
 import { useCart } from "@/store/cart";
 import type { Dish } from "@/types/dish";
 
 export function DishCard({ dish }: { dish: Dish }) {
   const addItem = useCart((state) => state.addItem);
   const openCart = useCart((state) => state.openCart);
+
+  // Con varias porciones la tarjeta anuncia la más barata: el precio suelto
+  // sería uno que nadie puede pagar, porque lo que se cobra es la porción.
+  const price = menuPrice(dish);
 
   const [justAdded, setJustAdded] = useState(false);
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -53,7 +58,10 @@ export function DishCard({ dish }: { dish: Dish }) {
         <div className="mb-2 flex items-start justify-between gap-3">
           <h3 className="text-2xl font-bold text-dark">{dish.name}</h3>
           <span className="shrink-0 whitespace-nowrap pt-1 text-xl font-black text-primary">
-            {formatCOP(dish.price)}
+            {price.from && (
+              <span className="mr-1 text-sm font-bold text-dark/50">Desde</span>
+            )}
+            {formatCOP(price.amount)}
           </span>
         </div>
 

@@ -22,8 +22,14 @@ export type OrderItem = {
   id: string;
   dish_id: string | null;
   name: string;
+  /** Precio de la porción pedida, no el del plato. Ver `portion`. */
   unit_price: number;
   quantity: number;
+  /**
+   * Personas de la porción pedida. null cuando no aplica: el plato no se vende
+   * por porciones, o el pedido es anterior a que existieran.
+   */
+  portion: number | null;
 };
 
 export type Order = {
@@ -81,6 +87,12 @@ export function normalizeOrder(row: Order): Order {
       ...item,
       unit_price: Number(item.unit_price) || 0,
       quantity: Number(item.quantity) || 0,
+      // Mismo cuidado que con `cash_bill`: el null significa "no aplica" y no
+      // puede confundirse con un cero.
+      portion:
+        item.portion === null || item.portion === undefined
+          ? null
+          : Number(item.portion) || null,
     })),
   };
 }

@@ -1,4 +1,5 @@
 import { groupByCategory } from "@/components/menu/grouping";
+import { menuPrice } from "@/lib/portions";
 import { site } from "@/lib/site";
 import type { Dish } from "@/types/dish";
 
@@ -108,7 +109,10 @@ export function menuSchema(dishes: Dish[]) {
         ...(dish.image_url && { image: dish.image_url }),
         offers: {
           "@type": "Offer",
-          price: dish.price,
+          // El mismo precio que ve la persona en la tarjeta: con porciones, el
+          // de la más barata. Publicar `dish.price` anunciaría en Google un
+          // precio por el que el plato no se vende.
+          price: menuPrice(dish).amount,
           priceCurrency: "COP",
           availability: "https://schema.org/InStock",
         },

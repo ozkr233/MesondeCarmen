@@ -4,6 +4,11 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 
 import {
+  normalizePortions,
+  validatePortions,
+  type Portion,
+} from "@/lib/portions";
+import {
   MENU_IMAGES_BUCKET as BUCKET,
   storagePathFromUrl,
 } from "@/lib/storage";
@@ -17,6 +22,9 @@ export type DishInput = {
   image_url: string | null;
   is_available: boolean;
   is_featured: boolean;
+  has_portions: boolean;
+  /** Tamaños y precios. Vacío = el plato se pide a su precio normal. */
+  portions: Portion[];
 };
 
 export type ActionResult = { error: string | null };
@@ -46,7 +54,9 @@ function validate(input: DishInput): string | null {
   if (!input.category.trim()) return "La categoría es obligatoria.";
   if (!Number.isFinite(input.price) || input.price < 0)
     return "El precio debe ser un número mayor o igual a cero.";
-  return null;
+  // La lista se valida aunque el interruptor esté apagado: los precios se
+  // guardan igual para no perderlos, y una lista rota no debe llegar a la base.
+  return validatePortions(input.portions);
 }
 
 function clean(input: DishInput) {
@@ -58,6 +68,10 @@ function clean(input: DishInput) {
     image_url: input.image_url?.trim() || null,
     is_available: input.is_available,
     is_featured: input.is_featured,
+    has_portions: input.has_portions,
+    // Ordenadas y sin repetidas antes de tocar la base: el selector del carrito
+    // y el "Desde" de la carta las leen tal cual quedan aquí.
+    portions: normalizePortions(input.portions),
   };
 }
 
@@ -144,6 +158,72 @@ export async function toggleFeatured(
   return { error: null };
 }
 
+/** Hacia dónde mueve un plato dentro de la portada. */
+export type MoveDirection = "up" | "down";
+
+/**
+ * Cambia el orden en que la portada muestra los destacados.
+ *
+ * Del cliente solo viaja el id y la dirección; las posiciones se recalculan
+ * aquí leyendo la lista real, siguiendo la regla de los docs de Next de no
+ * fiarse del contenido que manda el navegador.
+ *
+ * Se renumeran TODOS los destacados de 1 a N en vez de intercambiar dos
+ * posiciones. Los platos que nadie ha movido están todos en 0, y entre dos
+ * empates un intercambio no movería nada: la primera pulsación se vería como
+ * si el botón estuviera roto. Renumerar deshace los empates de una vez.
+ *
+ * Son un puñado de filas, y van en paralelo dentro de una sola acción, que es
+ * lo que recomiendan los docs cuando hace falta paralelizar.
+ */
+export async function moveFeatured(
+  id: string,
+  direction: MoveDirection,
+): Promise<ActionResult> {
+  if (direction !== "up" && direction !== "down") {
+    return { error: "Movimiento no válido." };
+  }
+
+  const supabase = await requireSession();
+
+  // El mismo orden que usa `getFeaturedDishes`, o "subir" significaría una cosa
+  // en el panel y otra en la portada.
+  const { data, error: readError } = await supabase
+    .from("dishes")
+    .select("id")
+    .eq("is_featured", true)
+    .order("featured_order", { ascending: true })
+    .order("created_at", { ascending: true });
+
+  if (readError) return { error: readError.message };
+
+  const order = (data ?? []).map((dish) => dish.id as string);
+  const from = order.indexOf(id);
+  if (from === -1) return { error: "Ese plato ya no está en la portada." };
+
+  const to = direction === "up" ? from - 1 : from + 1;
+  // En un extremo no hay nada que mover, y eso no es un error que reportar.
+  if (to < 0 || to >= order.length) return { error: null };
+
+  const [moved] = order.splice(from, 1);
+  order.splice(to, 0, moved);
+
+  const results = await Promise.all(
+    order.map((dishId, index) =>
+      supabase
+        .from("dishes")
+        .update({ featured_order: index + 1 })
+        .eq("id", dishId),
+    ),
+  );
+
+  const failed = results.find((result) => result.error);
+  if (failed?.error) return { error: failed.error.message };
+
+  refresh();
+  return { error: null };
+}
+
 /** Tarifa única de domicilio. Vive en la fila id = 1 de `settings`. */
 export async function updateDeliveryFee(fee: number): Promise<ActionResult> {
   if (!Number.isFinite(fee) || fee < 0) {
@@ -199,7 +279,9 @@ export async function duplicateDish(id: string): Promise<ActionResult> {
 
   const { data: dish, error: readError } = await supabase
     .from("dishes")
-    .select("name, description, price, category, image_url, is_available")
+    .select(
+      "name, description, price, category, image_url, is_available, has_portions, portions",
+    )
     .eq("id", id)
     .maybeSingle();
 
@@ -231,6 +313,10 @@ export async function duplicateDish(id: string): Promise<ActionResult> {
     is_available: dish.is_available,
     // La copia nace fuera de la portada: solo caben tres y ya están elegidos.
     is_featured: false,
+    // Las porciones sí se copian: duplicar un arroz para cambiarle el nombre y
+    // volver a escribir toda la tabla de precios no tendría sentido.
+    has_portions: dish.has_portions === true,
+    portions: normalizePortions(dish.portions),
   });
   if (error) return { error: error.message };
 

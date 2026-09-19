@@ -1,7 +1,7 @@
 import "server-only";
 
 import { resolveDishRef } from "@/lib/deeplink";
-import { compareCategories } from "@/lib/site";
+import { compareCategories, FEATURED_LIMIT } from "@/lib/site";
 import { normalizeDish, type Dish, type Settings } from "@/types/dish";
 import { createClient } from "@/utils/supabase/server";
 
@@ -22,22 +22,50 @@ function sortForMenu(dishes: Dish[]): Dish[] {
   );
 }
 
-/** Platos marcados como destacados: los que salen en la portada. */
-export async function getFeaturedDishes(limit = 3): Promise<Dish[]> {
+/**
+ * Platos marcados como destacados: los que salen en la portada, en el orden que
+ * fija el panel.
+ *
+ * El desempate por antigüedad no es decorativo: los platos que nadie ha movido
+ * están todos en `featured_order = 0`, y sin él la portada cambiaría de orden
+ * entre una visita y otra según lo que devolviera Postgres. Este es el mismo
+ * orden que dibuja `FeaturedOrderCard`; si cambia uno, cambia el otro.
+ */
+export async function getFeaturedDishes(
+  limit = FEATURED_LIMIT,
+): Promise<Dish[]> {
   const supabase = await createClient();
-  const { data, error } = await supabase
-    .from("dishes")
-    .select(COLUMNS)
-    .eq("is_available", true)
-    .eq("is_featured", true)
-    .order("created_at", { ascending: true })
-    .limit(limit);
 
-  if (error) {
-    console.error("[dishes] destacados:", error.message);
+  const query = async (byPosition: boolean) => {
+    const base = supabase
+      .from("dishes")
+      .select(COLUMNS)
+      .eq("is_available", true)
+      .eq("is_featured", true);
+
+    return (byPosition ? base.order("featured_order", { ascending: true }) : base)
+      .order("created_at", { ascending: true })
+      .limit(limit);
+  };
+
+  const ordered = await query(true);
+
+  // `featured_order` la añade 10_orden_portada.sql. Si el código se despliega
+  // antes de correr la migración, PostgREST rechaza ordenar por una columna que
+  // no existe (42703) y la portada se quedaría SIN PLATOS: el `catch` general
+  // de abajo devolvería la lista vacía y nadie vería un error.
+  //
+  // Se reintenta por antigüedad, que es como se ordenaba antes de que esto
+  // existiera. Cuando la migración esté corrida en todos lados, esta rama deja
+  // de ejecutarse y se puede borrar.
+  const result =
+    ordered.error?.code === "42703" ? await query(false) : ordered;
+
+  if (result.error) {
+    console.error("[dishes] destacados:", result.error.message);
     return [];
   }
-  return ((data as Dish[] | null) ?? []).map(normalizeDish);
+  return ((result.data as Dish[] | null) ?? []).map(normalizeDish);
 }
 
 /** Toda la carta visible al público, agrupable por categoría. */

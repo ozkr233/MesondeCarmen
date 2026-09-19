@@ -34,8 +34,12 @@ hayas puesto desde `/admin`.
 > ejecuta las migraciones incrementales que te falten, en orden —
 > [`02_carta_y_envio.sql`](supabase/02_carta_y_envio.sql) (añade `is_featured`,
 > `settings` y el resto de la carta de ejemplo),
-> [`03_pedidos.sql`](supabase/03_pedidos.sql) (añade el registro de pedidos) y
-> [`04_carta_completa.sql`](supabase/04_carta_completa.sql) (la carta real).
+> [`03_pedidos.sql`](supabase/03_pedidos.sql) (añade el registro de pedidos),
+> [`04_carta_completa.sql`](supabase/04_carta_completa.sql) (la carta real) y
+> [`09_porciones.sql`](supabase/09_porciones.sql) (porciones por plato; va
+> después de la carta real, que es de donde saca los arroces) y
+> [`10_orden_portada.sql`](supabase/10_orden_portada.sql) (orden de los
+> destacados).
 > Todos los archivos son idempotentes: se pueden volver a ejecutar sin romper
 > nada.
 
@@ -163,6 +167,9 @@ supabase/schema.sql        Instalación completa desde cero
 supabase/02_carta_y_envio.sql  Actualización incremental sobre la v1
 supabase/03_pedidos.sql        Actualización incremental: registro de pedidos
 supabase/04_carta_completa.sql Carta real del restaurante (32 platos)
+supabase/09_porciones.sql      Actualización incremental: porciones y sus precios
+supabase/10_orden_portada.sql  Actualización incremental: orden de los destacados
+lib/portions.ts                Porciones: precios por tamaño y precio de la carta
 assets/Logo.jpeg           Logo original del restaurante (fuente)
 public/logo.png            Logo con el fondo recortado, el que usa el sitio
 app/icon.png               Favicon · app/opengraph-image.png  Vista previa al compartir

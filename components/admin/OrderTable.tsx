@@ -2,6 +2,7 @@ import { ChevronDown, Phone, ShoppingBag } from "lucide-react";
 
 import { Card } from "@/components/ui/Card";
 import { formatCOP, formatDateTimeCO } from "@/lib/format";
+import { portionLabel } from "@/lib/portions";
 import { PAYMENT_LABELS } from "@/lib/validation";
 import type { Order } from "@/types/order";
 
@@ -80,6 +81,12 @@ function OrderRow({ order }: { order: Order }) {
                 >
                   <span>
                     {item.quantity} x {item.name}
+                    {item.portion !== null && (
+                      <span className="text-dark/45">
+                        {" "}
+                        ({portionLabel(item.portion)})
+                      </span>
+                    )}
                   </span>
                   <span className="shrink-0 font-semibold text-dark">
                     {formatCOP(item.unit_price * item.quantity)}

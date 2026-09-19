@@ -91,7 +91,11 @@ async function saveWithTimeout(
   code: string,
 ): Promise<SaveOutcome> {
   const save = saveOrder({
-    items: items.map((item) => ({ id: item.id, quantity: item.quantity })),
+    items: items.map((item) => ({
+      id: item.id,
+      quantity: item.quantity,
+      portion: item.portion,
+    })),
     code,
     name: customer.name,
     phone: customer.phone,

@@ -1,6 +1,7 @@
 "use server";
 
 import { isOrderCode } from "@/lib/order-code";
+import { MAX_PEOPLE, normalizePortions, resolvePortion } from "@/lib/portions";
 import { getSettings } from "@/lib/queries";
 import {
   cleanCustomer,
@@ -17,8 +18,9 @@ import { createClient } from "@/utils/supabase/server";
  *
  * A diferencia de las acciones de /admin, esta es pública: no hay sesión que
  * validar. La barrera es que nada de lo que manda el navegador se toma como
- * cierto — solo los ids de los platos, las cantidades y el código. Nombres y
- * precios se vuelven a leer de `dishes`, así que un carrito manipulado en
+ * cierto — solo los ids de los platos, las cantidades, la porción pedida y el
+ * código. Nombres y precios se vuelven a leer de `dishes`, y la porción se
+ * contrasta con las que ese plato ofrece, así que un carrito manipulado en
  * localStorage no puede ensuciar las estadísticas del panel.
  *
  * Las escrituras van con la llave secreta (`createAdminClient`), porque
@@ -31,10 +33,16 @@ import { createClient } from "@/utils/supabase/server";
  * escritura a una política de lectura que no hace ninguna falta aquí.
  */
 
-/** Lo mínimo que el cliente necesita mandar: qué plato y cuántos. */
+/** Lo mínimo que el cliente necesita mandar: qué plato, cuántos y de qué tamaño. */
 export type OrderLineInput = {
   id: string;
   quantity: number;
+  /**
+   * Personas de la porción elegida, o null si el plato no se pide por porción.
+   * Es una petición, no un hecho: aquí se contrasta con lo que ofrece el plato
+   * y el precio sale siempre de la base.
+   */
+  portion: number | null;
 };
 
 export type OrderInput = {
@@ -73,6 +81,17 @@ function validate(input: OrderInput): string | null {
     if (line.quantity > MAX_QUANTITY) {
       return `No se pueden pedir más de ${MAX_QUANTITY} unidades de un plato.`;
     }
+    // Solo se comprueba la forma: que la porción exista de verdad en el plato
+    // es cosa de `resolvePortion`, que para eso lee la carta.
+    if (line.portion !== null) {
+      if (
+        !Number.isInteger(line.portion) ||
+        line.portion < 1 ||
+        line.portion > MAX_PEOPLE
+      ) {
+        return "La porción elegida no es válida.";
+      }
+    }
   }
   return null;
 }
@@ -91,7 +110,7 @@ export async function saveOrder(input: OrderInput): Promise<SaveOrderResult> {
   const ids = [...new Set(input.items.map((line) => line.id))];
   const { data: dishes, error: dishesError } = await supabase
     .from("dishes")
-    .select("id, name, price")
+    .select("id, name, price, has_portions, portions")
     .in("id", ids);
 
   if (dishesError) {
@@ -102,7 +121,12 @@ export async function saveOrder(input: OrderInput): Promise<SaveOrderResult> {
   const byId = new Map(
     (dishes ?? []).map((dish) => [
       dish.id as string,
-      { name: dish.name as string, price: Number(dish.price) || 0 },
+      {
+        name: dish.name as string,
+        price: Number(dish.price) || 0,
+        has_portions: dish.has_portions === true,
+        portions: normalizePortions(dish.portions),
+      },
     ]),
   );
 
@@ -111,12 +135,21 @@ export async function saveOrder(input: OrderInput): Promise<SaveOrderResult> {
   const lines = input.items.flatMap((line) => {
     const dish = byId.get(line.id);
     if (!dish) return [];
+
+    // La porción se resuelve contra el plato, no contra lo que mandó el
+    // navegador: un plato sin porciones se cobra a su precio aunque llegue un
+    // "para 6 personas", y una porción que el dueño ya borró cae a la más
+    // barata. `unit_price` guarda lo que cuesta la porción, de modo que el
+    // total de la línea sigue siendo unit_price x quantity.
+    const portion = resolvePortion(dish, line.portion);
+
     return [
       {
         dish_id: line.id,
         name: dish.name,
-        unit_price: dish.price,
+        unit_price: portion ? portion.price : dish.price,
         quantity: line.quantity,
+        portion: portion ? portion.people : null,
       },
     ];
   });

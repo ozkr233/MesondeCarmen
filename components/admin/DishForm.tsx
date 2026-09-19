@@ -1,6 +1,6 @@
 "use client";
 
-import { AlertCircle, ImagePlus, Loader2, X } from "lucide-react";
+import { AlertCircle, ImagePlus, Loader2, Plus, X } from "lucide-react";
 import Image from "next/image";
 import { useEffect, useRef, useState, type FormEvent } from "react";
 
@@ -10,6 +10,12 @@ import { Input, Textarea } from "@/components/ui/Input";
 import { Modal } from "@/components/ui/Modal";
 import { Select } from "@/components/ui/Select";
 import { DEFAULT_CATEGORY } from "@/lib/categories";
+import {
+  MAX_PEOPLE,
+  MAX_PORTIONS,
+  validatePortions,
+  type Portion,
+} from "@/lib/portions";
 import { MENU_IMAGES_BUCKET as BUCKET } from "@/lib/storage";
 import { createClient } from "@/utils/supabase/client";
 import type { Dish } from "@/types/dish";
@@ -51,6 +57,17 @@ export function DishForm({ open, dish, categories, onClose, onSaved }: Props) {
   );
 }
 
+/**
+ * Una fila del editor de porciones. Los números viven como texto mientras se
+ * escriben, igual que el precio del plato: un `<input type="number">` a medio
+ * teclear no siempre tiene valor numérico, y borrarlo del todo no debe
+ * convertirse en un cero.
+ *
+ * El `id` no se guarda en ninguna parte: solo da una `key` estable para que
+ * quitar una fila del medio no le pase su texto a la de abajo.
+ */
+type PortionRow = { id: string; people: string; price: string };
+
 type FormState = {
   name: string;
   description: string;
@@ -58,7 +75,17 @@ type FormState = {
   category: string;
   is_available: boolean;
   is_featured: boolean;
+  has_portions: boolean;
+  portions: PortionRow[];
 };
+
+function portionRows(portions: Portion[]): PortionRow[] {
+  return portions.map((portion) => ({
+    id: crypto.randomUUID(),
+    people: String(portion.people),
+    price: String(portion.price),
+  }));
+}
 
 function initialState(dish: Dish | null): FormState {
   return dish
@@ -69,6 +96,8 @@ function initialState(dish: Dish | null): FormState {
         category: dish.category,
         is_available: dish.is_available,
         is_featured: dish.is_featured,
+        has_portions: dish.has_portions,
+        portions: portionRows(dish.portions),
       }
     : {
         name: "",
@@ -77,7 +106,20 @@ function initialState(dish: Dish | null): FormState {
         category: DEFAULT_CATEGORY,
         is_available: true,
         is_featured: false,
+        has_portions: false,
+        portions: [],
       };
+}
+
+/**
+ * Lo que se teclea en un campo de dinero o de cantidad, como número. Un campo
+ * vacío sale `NaN` a propósito: `Number("")` es 0, y guardar una porción de
+ * cero personas o a precio cero por no haberla rellenado sería peor que el
+ * mensaje de error que devuelve `validatePortions`.
+ */
+function toAmount(value: string): number {
+  const cleaned = value.replace(/[^\d.,-]/g, "").replace(",", ".");
+  return cleaned.trim() ? Number(cleaned) : Number.NaN;
 }
 
 function DishFormBody({
@@ -144,6 +186,41 @@ function DishFormBody({
     if (fileInput.current) fileInput.current.value = "";
   }
 
+  function updatePortion(id: string, field: "people" | "price", value: string) {
+    setForm((current) => ({
+      ...current,
+      portions: current.portions.map((row) =>
+        row.id === id ? { ...row, [field]: value } : row,
+      ),
+    }));
+  }
+
+  function removePortion(id: string) {
+    setForm((current) => ({
+      ...current,
+      portions: current.portions.filter((row) => row.id !== id),
+    }));
+  }
+
+  /** Arranca en el primer número de personas que no esté ya usado. */
+  function addPortion() {
+    setForm((current) => {
+      if (current.portions.length >= MAX_PORTIONS) return current;
+
+      const used = new Set(current.portions.map((row) => Number(row.people)));
+      let people = 1;
+      while (people < MAX_PEOPLE && used.has(people)) people += 1;
+
+      return {
+        ...current,
+        portions: [
+          ...current.portions,
+          { id: crypto.randomUUID(), people: String(people), price: "" },
+        ],
+      };
+    });
+  }
+
   /**
    * La imagen se sube desde el navegador (no por Server Action) porque el
    * cuerpo de una Server Action está limitado a ~1 MB y una foto lo supera.
@@ -184,6 +261,31 @@ function DishFormBody({
       return;
     }
 
+    // Las filas en blanco son las que se añadieron y nunca se llenaron: se
+    // descartan sin avisar. Con el interruptor apagado se descartan también las
+    // incompletas, porque el editor no está a la vista y un error sobre una
+    // fila que no se ve no habría manera de arreglarlo.
+    const portions = form.portions
+      .map((row) => ({
+        people: toAmount(row.people),
+        price: toAmount(row.price),
+      }))
+      .filter(({ people, price }) =>
+        form.has_portions
+          ? !(Number.isNaN(people) && Number.isNaN(price))
+          : !Number.isNaN(people) && !Number.isNaN(price),
+      );
+
+    // La acción vuelve a validarlas por su cuenta; hacerlo aquí ahorra el viaje
+    // y evita que un campo vacío llegue al servidor como NaN.
+    if (form.has_portions) {
+      const invalidPortions = validatePortions(portions);
+      if (invalidPortions) {
+        setError(invalidPortions);
+        return;
+      }
+    }
+
     setSaving(true);
     setError(null);
 
@@ -208,6 +310,10 @@ function DishFormBody({
         image_url: imageUrl,
         is_available: form.is_available,
         is_featured: form.is_featured,
+        has_portions: form.has_portions,
+        // Se mandan encendido o no: apagar el interruptor esconde las porciones
+        // de la carta, pero no debe borrar los precios ya escritos.
+        portions,
       };
 
       const result = dish
@@ -378,7 +484,108 @@ function DishFormBody({
             Destacado en la portada
           </span>
         </label>
+
+        <label className="flex cursor-pointer items-center gap-2.5">
+          <input
+            type="checkbox"
+            checked={form.has_portions}
+            onChange={(event) =>
+              setForm({ ...form, has_portions: event.target.checked })
+            }
+            className="h-4 w-4 accent-primary"
+          />
+          <span className="text-sm font-semibold text-dark/80">
+            Permite elegir porción
+          </span>
+        </label>
       </div>
+
+      {/* El editor se esconde con el interruptor, pero los precios no se
+          borran: volver a encenderlo los devuelve tal cual estaban. */}
+      {form.has_portions && (
+        <div className="rounded-lg border border-dark/10 bg-light/60 p-3">
+          <div className="flex items-baseline justify-between">
+            <span className="text-sm font-semibold text-dark/80">
+              Porciones y precios
+            </span>
+            <span className="text-xs tabular-nums text-dark/45">
+              {form.portions.length}/{MAX_PORTIONS}
+            </span>
+          </div>
+
+          {form.portions.length === 0 ? (
+            <p className="mt-2 text-xs text-dark/55">
+              Sin porciones, el plato se pide a su precio normal. Añade una para
+              venderlo por tamaños.
+            </p>
+          ) : (
+            <div className="mt-3 space-y-2">
+              {/* Los anchos viven en estos contenedores y no en los campos:
+                  `fieldBase` ya trae `w-full` y `cn()` solo concatena, así que
+                  un `w-24` en el propio input no gana — decidiría el orden del
+                  CSS generado. Cada `Input` llena el hueco que le toca. */}
+              <div className="flex items-center gap-2 text-xs font-semibold text-dark/50">
+                <span className="w-24 shrink-0">Personas</span>
+                <span className="min-w-0 flex-1">Precio (COP)</span>
+                <span className="w-8 shrink-0" aria-hidden />
+              </div>
+
+              {form.portions.map((row, index) => (
+                <div key={row.id} className="flex items-center gap-2">
+                  <div className="w-24 shrink-0">
+                    <Input
+                      type="number"
+                      min={1}
+                      max={MAX_PEOPLE}
+                      inputMode="numeric"
+                      aria-label={`Personas de la porción ${index + 1}`}
+                      value={row.people}
+                      onChange={(event) =>
+                        updatePortion(row.id, "people", event.target.value)
+                      }
+                      className="px-3 py-2 text-sm"
+                    />
+                  </div>
+                  <div className="min-w-0 flex-1">
+                    <Input
+                      type="number"
+                      min={0}
+                      step={500}
+                      inputMode="numeric"
+                      placeholder="30000"
+                      aria-label={`Precio de la porción ${index + 1}`}
+                      value={row.price}
+                      onChange={(event) =>
+                        updatePortion(row.id, "price", event.target.value)
+                      }
+                      className="px-3 py-2 text-sm"
+                    />
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => removePortion(row.id)}
+                    aria-label={`Quitar la porción ${index + 1}`}
+                    className="w-8 shrink-0 rounded-lg p-1.5 text-dark/35 transition-colors hover:bg-red-50 hover:text-red-600"
+                  >
+                    <X size={16} />
+                  </button>
+                </div>
+              ))}
+            </div>
+          )}
+
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            onClick={addPortion}
+            disabled={form.portions.length >= MAX_PORTIONS}
+            className="mt-3"
+          >
+            <Plus size={14} /> Añadir porción
+          </Button>
+        </div>
+      )}
 
       {error && (
         <p className="flex items-start gap-2 rounded-lg bg-red-50 p-3 text-sm text-red-700">

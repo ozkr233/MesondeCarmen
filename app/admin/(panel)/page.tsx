@@ -1,5 +1,6 @@
 import { DeliveryFeeCard } from "@/components/admin/DeliveryFeeCard";
 import { DishTable } from "@/components/admin/DishTable";
+import { FeaturedOrderCard } from "@/components/admin/FeaturedOrderCard";
 import { getAllDishes, getSettings } from "@/lib/queries";
 
 export const metadata = { title: "Platos | El Mesón de Carmen" };
@@ -18,6 +19,7 @@ export default async function AdminDashboardPage() {
         </p>
       )}
       <DeliveryFeeCard deliveryFee={settings.deliveryFee} />
+      <FeaturedOrderCard dishes={dishes} />
       <DishTable dishes={dishes} />
     </>
   );
