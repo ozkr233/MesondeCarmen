@@ -543,7 +543,7 @@ function DishFormBody({
                       onChange={(event) =>
                         updatePortion(row.id, "people", event.target.value)
                       }
-                      className="px-3 py-2 text-sm"
+                      className="px-3 py-2 text-base sm:text-sm"
                     />
                   </div>
                   <div className="min-w-0 flex-1">
@@ -558,7 +558,7 @@ function DishFormBody({
                       onChange={(event) =>
                         updatePortion(row.id, "price", event.target.value)
                       }
-                      className="px-3 py-2 text-sm"
+                      className="px-3 py-2 text-base sm:text-sm"
                     />
                   </div>
                   <button
@@ -594,7 +594,7 @@ function DishFormBody({
         </p>
       )}
 
-      <div className="flex justify-end gap-2 border-t border-dark/10 pt-4">
+      <div className="flex flex-wrap justify-end gap-2 border-t border-dark/10 pt-4">
         <Button
           type="button"
           variant="ghost"

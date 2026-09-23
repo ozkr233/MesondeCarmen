@@ -19,7 +19,9 @@ const variants: Record<Variant, string> = {
 const sizes: Record<Size, string> = {
   sm: "px-3 py-1.5 text-sm",
   md: "px-5 py-2.5 text-sm",
-  lg: "px-8 py-4 text-lg",
+  // Más compacto en el teléfono: a 18 px "Continuar con el pedido" se partía
+  // en dos líneas dentro del carrito.
+  lg: "px-6 py-4 text-base sm:px-8 sm:text-lg",
 };
 
 type Props = ButtonHTMLAttributes<HTMLButtonElement> & {

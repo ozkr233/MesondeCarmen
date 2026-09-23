@@ -124,7 +124,7 @@ function CartPanel({ deliveryFee }: { deliveryFee: number }) {
 
                   <div className="flex min-w-0 flex-1 flex-col gap-1.5">
                     <div className="flex items-start justify-between gap-2">
-                      <p className="font-bold leading-tight text-dark">
+                      <p className="min-w-0 font-bold leading-tight text-dark wrap-break-word">
                         {item.name}
                       </p>
                       <button
@@ -148,7 +148,7 @@ function CartPanel({ deliveryFee }: { deliveryFee: number }) {
 
                     {/* `mt-auto` mantiene esta fila pegada abajo, alineada con
                         el pie de la miniatura, haya selector o no. */}
-                    <div className="mt-auto flex items-center justify-between">
+                    <div className="mt-auto flex items-center justify-between gap-2">
                       <div className="flex items-center gap-1 rounded-lg border border-dark/10">
                         <QtyButton
                           label={`Quitar una unidad de ${item.name}`}
@@ -172,7 +172,7 @@ function CartPanel({ deliveryFee }: { deliveryFee: number }) {
                           <Plus size={14} />
                         </QtyButton>
                       </div>
-                      <span className="font-bold text-primary">
+                      <span className="whitespace-nowrap font-bold text-primary">
                         {formatCOP(lineTotal(item))}
                       </span>
                     </div>
@@ -217,6 +217,11 @@ function CartPanel({ deliveryFee }: { deliveryFee: number }) {
  * selector del sistema, que es lo que espera quien pide desde el teléfono.
  *
  * Cada opción lleva su precio porque es el dato con el que se decide el tamaño.
+ *
+ * En el teléfono la etiqueta va arriba y el selector a lo ancho: en línea no
+ * cabe junto a una opción como "4 personas · $ 120.000" y se salía de la
+ * tarjeta. Y va a 16 px porque iOS amplía la página al tocar un campo con
+ * letra más pequeña, y no la devuelve a su tamaño al cerrar el selector.
  */
 function PortionSelect({
   item,
@@ -226,9 +231,9 @@ function PortionSelect({
   onChange: (people: number) => void;
 }) {
   return (
-    <label className="flex items-center gap-1.5 text-xs text-dark/60">
+    <label className="flex flex-wrap items-center gap-x-1.5 gap-y-1 text-xs text-dark/60">
       Porción para
-      <span className="relative">
+      <span className="relative w-full sm:w-auto">
         <select
           value={item.portion ?? ""}
           onChange={(event) => onChange(Number(event.target.value))}
@@ -236,7 +241,7 @@ function PortionSelect({
           // varios arroces, "Porción para" a secas no distingue un selector de
           // otro.
           aria-label={`Porción para ${item.name}`}
-          className="appearance-none rounded-md border border-dark/15 bg-white py-1 pl-2 pr-6 text-xs font-semibold text-dark"
+          className="w-full appearance-none rounded-md border border-dark/15 bg-white py-1.5 pl-2 pr-7 text-base font-semibold text-dark sm:w-auto sm:py-1 sm:pr-6 sm:text-xs"
         >
           {item.portions.map((portion) => (
             <option key={portion.people} value={portion.people}>
@@ -274,7 +279,7 @@ function QtyButton({
       disabled={disabled}
       title={title ?? label}
       aria-label={label}
-      className="p-1.5 text-dark/60 transition-colors hover:bg-dark/5 hover:text-dark disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:bg-transparent"
+      className="p-2 text-dark/60 transition-colors hover:bg-dark/5 hover:text-dark disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:bg-transparent"
     >
       {children}
     </button>

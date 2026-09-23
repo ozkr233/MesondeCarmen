@@ -5,7 +5,10 @@ import { site } from "@/lib/site";
 
 export function Footer() {
   return (
-    <footer className="bg-dark py-8 text-center text-white">
+    // El `pb-44` del móvil deja el contenido por encima de los botones
+    // flotantes (WhatsApp y carrito), que al final de la página lo tapaban.
+    // Desde `sm` el texto centrado ya no llega a la esquina donde están.
+    <footer className="bg-dark px-4 pb-44 pt-8 text-center text-white sm:pb-8">
       <Logo size={96} className="mx-auto mb-3 h-20 w-20" />
       <p className="mb-2 font-display text-2xl font-bold">{site.name}</p>
       <p className="mb-4 text-gray-400">{site.tagline}</p>

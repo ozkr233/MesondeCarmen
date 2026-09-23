@@ -334,6 +334,8 @@ export function DishTable({ dishes }: { dishes: Dish[] }) {
         </Card>
       ) : (
         <>
+          {/* Los filtros van a 16 px en el teléfono: con letra más pequeña,
+              iOS amplía la página al enfocarlos y no la devuelve. */}
           <Card className="mb-4 flex flex-wrap items-center gap-3 p-3">
             <div className="relative min-w-[200px] flex-1">
               <Search
@@ -345,7 +347,7 @@ export function DishTable({ dishes }: { dishes: Dish[] }) {
                 type="search"
                 aria-label="Buscar plato"
                 placeholder="Buscar por nombre o descripción…"
-                className="py-2 pl-9 text-sm"
+                className="py-2 pl-9 text-base sm:text-sm"
                 value={query}
                 onChange={(event) => setQuery(event.target.value)}
               />
@@ -353,7 +355,7 @@ export function DishTable({ dishes }: { dishes: Dish[] }) {
 
             <Select
               aria-label="Filtrar por categoría"
-              className="w-auto min-w-[9rem] py-2 text-sm"
+              className="w-auto min-w-[9rem] py-2 text-base sm:text-sm"
               value={category}
               onChange={(event) => setCategory(event.target.value)}
             >
@@ -367,7 +369,7 @@ export function DishTable({ dishes }: { dishes: Dish[] }) {
 
             <Select
               aria-label="Filtrar por disponibilidad"
-              className="w-auto min-w-[9rem] py-2 text-sm"
+              className="w-auto min-w-[9rem] py-2 text-base sm:text-sm"
               value={available}
               onChange={(event) =>
                 setAvailable(event.target.value as TriState)
@@ -380,7 +382,7 @@ export function DishTable({ dishes }: { dishes: Dish[] }) {
 
             <Select
               aria-label="Filtrar por portada"
-              className="w-auto min-w-[9rem] py-2 text-sm"
+              className="w-auto min-w-[9rem] py-2 text-base sm:text-sm"
               value={featured}
               onChange={(event) => setFeatured(event.target.value as TriState)}
             >

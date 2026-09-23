@@ -35,9 +35,14 @@ h3 {
   transition: all 0.3s ease;
   box-shadow: 0 4px 15px rgb(37 211 102 / 0.4);
 }
-.btn-wa:hover {
-  background-color: var(--color-whatsapp-dark);
-  transform: translateY(-2px);
+/* Los hover van bajo `(hover: hover)`, como las variantes `hover:` de
+   Tailwind: en una pantalla táctil el :hover se queda pegado tras el toque y
+   la tarjeta o el botón seguían levantados después de pulsar "Agregar". */
+@media (hover: hover) {
+  .btn-wa:hover {
+    background-color: var(--color-whatsapp-dark);
+    transform: translateY(-2px);
+  }
 }
 
 /* --- Tarjeta de plato --------------------------------------------------- */
@@ -46,11 +51,13 @@ h3 {
     transform 0.3s ease,
     box-shadow 0.3s ease;
 }
-.menu-card:hover {
-  transform: translateY(-5px);
-  box-shadow:
-    0 20px 25px -5px rgb(0 0 0 / 0.1),
-    0 10px 10px -5px rgb(0 0 0 / 0.04);
+@media (hover: hover) {
+  .menu-card:hover {
+    transform: translateY(-5px);
+    box-shadow:
+      0 20px 25px -5px rgb(0 0 0 / 0.1),
+      0 10px 10px -5px rgb(0 0 0 / 0.04);
+  }
 }
 
 /* --- Latido del botón flotante ------------------------------------------ */

@@ -182,7 +182,9 @@ export function TeamCard({
                   className="flex flex-wrap items-center justify-between gap-3 px-5 py-4"
                 >
                   <div className="min-w-0">
-                    <p className="font-bold text-dark">
+                    {/* Un correo es una sola "palabra": sin permitir el corte
+                        en cualquier punto se salía de la tarjeta en el móvil. */}
+                    <p className="font-bold text-dark wrap-anywhere">
                       {member.email}
                       {isSelf && (
                         <span className="ml-2 rounded bg-primary/10 px-1.5 py-0.5 text-xs font-semibold uppercase tracking-wide text-primary">

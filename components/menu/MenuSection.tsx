@@ -52,7 +52,10 @@ export function MenuSection({
         ) : isFeatured ? (
           // En la portada los destacados van en una sola grilla, sin encabezados
           // de categoría: son pocos y el objetivo es que se vean como escaparate.
-          <div className="grid gap-8 md:grid-cols-3">
+          //
+          // Tres columnas solo desde `lg`: en una tablet (768–1023 px) cada
+          // tarjeta se quedaba sin sitio y el botón "Pedir" salía recortado.
+          <div className="grid gap-8 md:grid-cols-2 lg:grid-cols-3">
             {dishes.map((dish) => (
               <DishCard key={dish.id} dish={dish} />
             ))}
@@ -67,11 +70,16 @@ export function MenuSection({
                   id={categorySlug(category)}
                   className="scroll-mt-32"
                 >
-                  <h3 className="mb-8 flex items-center gap-4 text-2xl font-bold uppercase tracking-wide text-dark">
-                    <span className="whitespace-nowrap">{category}</span>
-                    <span className="h-px flex-1 bg-dark/10" />
+                  {/* Las categorías las escribe el dueño: una larga como
+                      "Especialidades Guajiras" no cabe en una línea en el
+                      teléfono y, sin poder partirse, desbordaba la página. */}
+                  <h3 className="mb-8 flex items-center gap-4 text-xl font-bold uppercase tracking-wide text-dark sm:text-2xl">
+                    <span className="min-w-0 wrap-break-word sm:whitespace-nowrap">
+                      {category}
+                    </span>
+                    <span className="h-px min-w-8 flex-1 bg-dark/10" />
                   </h3>
-                  <div className="grid gap-8 md:grid-cols-3">
+                  <div className="grid gap-8 md:grid-cols-2 lg:grid-cols-3">
                     {categoryDishes.map((dish) => (
                       <DishCard key={dish.id} dish={dish} />
                     ))}

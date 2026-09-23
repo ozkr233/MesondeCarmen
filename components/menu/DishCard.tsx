@@ -55,8 +55,12 @@ export function DishCard({ dish }: { dish: Dish }) {
       </div>
 
       <div className="flex flex-grow flex-col p-6">
-        <div className="mb-2 flex items-start justify-between gap-3">
-          <h3 className="text-2xl font-bold text-dark">{dish.name}</h3>
+        {/* Si el nombre y el precio no caben juntos, el precio baja en vez de
+            estrujar el nombre a una palabra por línea o salirse de la tarjeta. */}
+        <div className="mb-2 flex flex-wrap items-start justify-between gap-x-3 gap-y-1">
+          <h3 className="min-w-0 text-2xl font-bold text-dark wrap-break-word">
+            {dish.name}
+          </h3>
           <span className="shrink-0 whitespace-nowrap pt-1 text-xl font-black text-primary">
             {price.from && (
               <span className="mr-1 text-sm font-bold text-dark/50">Desde</span>

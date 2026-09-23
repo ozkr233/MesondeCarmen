@@ -451,7 +451,16 @@ export function CheckoutForm({
             disabled={sending}
           >
             {sending && <Loader2 size={18} className="animate-spin" />}
-            {sending ? "Enviando…" : "Enviar pedido por WhatsApp"}
+            {/* En el teléfono el texto completo se partía en dos líneas y el
+                botón le quitaba alto al formulario. */}
+            {sending ? (
+              "Enviando…"
+            ) : (
+              <span>
+                Enviar<span className="hidden sm:inline"> pedido</span> por
+                WhatsApp
+              </span>
+            )}
           </Button>
         )}
       </footer>
