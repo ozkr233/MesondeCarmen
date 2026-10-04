@@ -241,6 +241,26 @@ export async function updateDeliveryFee(fee: number): Promise<ActionResult> {
   return { error: null };
 }
 
+/**
+ * Enciende o apaga el formulario de datos del carrito. Vive en la misma fila
+ * de `settings` que el domicilio.
+ */
+export async function updateCheckoutForm(
+  enabled: boolean,
+): Promise<ActionResult> {
+  if (typeof enabled !== "boolean") return { error: "Valor no válido." };
+
+  const supabase = await requireSession();
+  const { error } = await supabase
+    .from("settings")
+    .update({ checkout_form: enabled, updated_at: new Date().toISOString() })
+    .eq("id", 1);
+  if (error) return { error: error.message };
+
+  refresh();
+  return { error: null };
+}
+
 export async function deleteDish(id: string): Promise<ActionResult> {
   const supabase = await requireSession();
 

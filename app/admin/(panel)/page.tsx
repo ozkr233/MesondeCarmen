@@ -1,3 +1,4 @@
+import { CheckoutFormCard } from "@/components/admin/CheckoutFormCard";
 import { DeliveryFeeCard } from "@/components/admin/DeliveryFeeCard";
 import { DishTable } from "@/components/admin/DishTable";
 import { FeaturedOrderCard } from "@/components/admin/FeaturedOrderCard";
@@ -19,6 +20,7 @@ export default async function AdminDashboardPage() {
         </p>
       )}
       <DeliveryFeeCard deliveryFee={settings.deliveryFee} />
+      <CheckoutFormCard enabled={settings.checkoutForm} />
       <FeaturedOrderCard dishes={dishes} />
       <DishTable dishes={dishes} />
     </>

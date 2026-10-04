@@ -165,10 +165,16 @@ create policy "dishes_delete_admin"
 --    El check (id = 1) impide que se creen filas sueltas por error.
 -- ----------------------------------------------------------------------------
 create table if not exists public.settings (
-  id           smallint      primary key default 1 check (id = 1),
-  delivery_fee numeric(10,2) not null default 0,
-  updated_at   timestamptz   not null default now()
+  id            smallint      primary key default 1 check (id = 1),
+  delivery_fee  numeric(10,2) not null default 0,
+  -- Si el carrito pide nombre, teléfono y dirección antes de abrir WhatsApp.
+  -- Apagado, el pedido sale directo con los platos y el total.
+  checkout_form boolean       not null default true,
+  updated_at    timestamptz   not null default now()
 );
+
+alter table public.settings
+  add column if not exists checkout_form boolean not null default true;
 
 insert into public.settings (id) values (1)
 on conflict (id) do nothing;
@@ -198,9 +204,11 @@ create policy "settings_update_admin"
 create table if not exists public.orders (
   id               uuid          primary key default gen_random_uuid(),
   code             text          not null,
-  customer_name    text          not null,
-  customer_phone   text          not null,
-  customer_address text          not null,
+  -- null en los pedidos enviados con el formulario apagado: esos datos viven
+  -- en el chat de WhatsApp, no en la fila.
+  customer_name    text,
+  customer_phone   text,
+  customer_address text,
   notes            text,
   -- Cómo paga: valor interno del formulario, no la etiqueta que ve el cliente.
   -- `cash_bill` distingue null (no aplica) de 0 (paga con el valor exacto).
@@ -213,6 +221,12 @@ create table if not exists public.orders (
                      check (status in ('pendiente','confirmado','entregado','cancelado')),
   created_at       timestamptz   not null default now()
 );
+
+-- Para las bases que se crearon cuando los datos del cliente eran obligatorios.
+alter table public.orders
+  alter column customer_name    drop not null,
+  alter column customer_phone   drop not null,
+  alter column customer_address drop not null;
 
 create index if not exists orders_created_at_idx on public.orders (created_at desc);
 create index if not exists orders_status_idx     on public.orders (status);
@@ -241,11 +255,14 @@ alter table public.orders
   add constraint orders_code_len
     check (length(code) between 1 and 20),
   add constraint orders_customer_name_len
-    check (length(btrim(customer_name)) between 1 and 120),
+    check (customer_name is null
+           or length(btrim(customer_name)) between 1 and 120),
   add constraint orders_customer_phone_len
-    check (length(btrim(customer_phone)) between 1 and 40),
+    check (customer_phone is null
+           or length(btrim(customer_phone)) between 1 and 40),
   add constraint orders_customer_address_len
-    check (length(btrim(customer_address)) between 1 and 300),
+    check (customer_address is null
+           or length(btrim(customer_address)) between 1 and 300),
   add constraint orders_notes_len
     check (notes is null or length(notes) <= 500),
   add constraint orders_subtotal_positive

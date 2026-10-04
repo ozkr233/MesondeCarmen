@@ -39,7 +39,9 @@ hayas puesto desde `/admin`.
 > [`09_porciones.sql`](supabase/09_porciones.sql) (porciones por plato; va
 > después de la carta real, que es de donde saca los arroces) y
 > [`10_orden_portada.sql`](supabase/10_orden_portada.sql) (orden de los
-> destacados).
+> destacados) y
+> [`11_formulario_pedido.sql`](supabase/11_formulario_pedido.sql) (interruptor
+> del formulario de pedido).
 > Todos los archivos son idempotentes: se pueden volver a ejecutar sin romper
 > nada.
 
@@ -125,6 +127,7 @@ Desde `/admin`, sin tocar código:
 | Qué | Dónde |
 | --- | --- |
 | Costo del domicilio | Tarjeta superior. Se suma al total del pedido de WhatsApp; en 0 no se cobra ni se menciona. |
+| Formulario de pedido | Interruptor bajo el domicilio. Apagado, el carrito manda directo los platos y el total a WhatsApp, sin pedir nombre, teléfono ni dirección; el pedido igual queda en `/admin/pedidos`, sin datos del cliente. |
 | Disponibilidad | Interruptor verde. Un plato agotado desaparece de la portada y de `/carta`. |
 | Platos de la portada | Interruptor dorado. La landing muestra los 3 destacados más antiguos; el resto de la carta vive en `/carta`. |
 | Precios, fotos y categorías | Botón de editar. La categoría es texto libre con sugerencias. |
@@ -169,6 +172,7 @@ supabase/03_pedidos.sql        Actualización incremental: registro de pedidos
 supabase/04_carta_completa.sql Carta real del restaurante (32 platos)
 supabase/09_porciones.sql      Actualización incremental: porciones y sus precios
 supabase/10_orden_portada.sql  Actualización incremental: orden de los destacados
+supabase/11_formulario_pedido.sql Actualización incremental: formulario de pedido opcional
 lib/portions.ts                Porciones: precios por tamaño y precio de la carta
 assets/Logo.jpeg           Logo original del restaurante (fuente)
 public/logo.png            Logo con el fondo recortado, el que usa el sitio

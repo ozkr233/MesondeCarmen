@@ -55,7 +55,8 @@ function OrderRow({ order }: { order: Order }) {
             {order.code}
           </p>
           <p className="truncate text-sm text-dark/60">
-            {order.customer_name} · {formatDateTimeCO(order.created_at)}
+            {order.customer_name ?? "Pedido rápido"} ·{" "}
+            {formatDateTimeCO(order.created_at)}
           </p>
         </div>
 
@@ -97,27 +98,40 @@ function OrderRow({ order }: { order: Order }) {
           )}
         </div>
 
-        <dl className="grid gap-3 sm:grid-cols-2">
-          <div>
-            <Label>Teléfono</Label>
-            <a
-              href={`tel:${order.customer_phone.replace(/\s/g, "")}`}
-              className="flex items-center gap-1.5 font-semibold text-whatsapp-dark hover:underline"
-            >
-              <Phone size={14} /> {order.customer_phone}
-            </a>
-          </div>
-          <div>
-            <Label>Dirección</Label>
-            <p className="text-dark/70">{order.customer_address}</p>
-          </div>
-          {order.payment_method && (
-            <div>
-              <Label>Pago</Label>
-              <p className="text-dark/70">{paymentText(order)}</p>
-            </div>
-          )}
-        </dl>
+        {/* Con el formulario apagado, el pedido llega sin datos del cliente:
+            en vez de dos casillas vacías, se dice dónde están. */}
+        {!order.customer_phone && !order.customer_address ? (
+          <p className="text-dark/45">
+            Enviado sin formulario: los datos del cliente están en el chat de
+            WhatsApp.
+          </p>
+        ) : (
+          <dl className="grid gap-3 sm:grid-cols-2">
+            {order.customer_phone && (
+              <div>
+                <Label>Teléfono</Label>
+                <a
+                  href={`tel:${order.customer_phone.replace(/\s/g, "")}`}
+                  className="flex items-center gap-1.5 font-semibold text-whatsapp-dark hover:underline"
+                >
+                  <Phone size={14} /> {order.customer_phone}
+                </a>
+              </div>
+            )}
+            {order.customer_address && (
+              <div>
+                <Label>Dirección</Label>
+                <p className="text-dark/70">{order.customer_address}</p>
+              </div>
+            )}
+            {order.payment_method && (
+              <div>
+                <Label>Pago</Label>
+                <p className="text-dark/70">{paymentText(order)}</p>
+              </div>
+            )}
+          </dl>
+        )}
 
         {order.notes && (
           <div>

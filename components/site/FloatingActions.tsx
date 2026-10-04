@@ -13,9 +13,11 @@ import type { Dish } from "@/types/dish";
  */
 export function FloatingActions({
   deliveryFee,
+  checkoutForm,
   deepLinkDish = null,
 }: {
   deliveryFee: number;
+  checkoutForm: boolean;
   deepLinkDish?: Dish | null;
 }) {
   return (
@@ -30,7 +32,7 @@ export function FloatingActions({
           💬
         </WhatsAppLink>
       </div>
-      <CartDrawer deliveryFee={deliveryFee} />
+      <CartDrawer deliveryFee={deliveryFee} checkoutForm={checkoutForm} />
       <CartDeepLink dish={deepLinkDish} />
     </>
   );

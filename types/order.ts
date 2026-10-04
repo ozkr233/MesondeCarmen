@@ -35,9 +35,13 @@ export type OrderItem = {
 export type Order = {
   id: string;
   code: string;
-  customer_name: string;
-  customer_phone: string;
-  customer_address: string;
+  /**
+   * Los tres en null cuando el pedido salió con el formulario apagado: esos
+   * datos se cuadraron en el chat de WhatsApp.
+   */
+  customer_name: string | null;
+  customer_phone: string | null;
+  customer_address: string | null;
   notes: string | null;
   /** null en los pedidos anteriores a que se preguntara el método de pago. */
   payment_method: PaymentMethod | null;

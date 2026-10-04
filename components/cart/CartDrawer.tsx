@@ -1,11 +1,21 @@
 "use client";
 
-import { ChevronDown, Minus, Plus, ShoppingCart, Trash2, X } from "lucide-react";
+import {
+  ChevronDown,
+  Loader2,
+  Minus,
+  Plus,
+  ShoppingCart,
+  Trash2,
+  X,
+} from "lucide-react";
 import Image from "next/image";
 import { useEffect, useState } from "react";
 
 import { CheckoutForm } from "@/components/cart/CheckoutForm";
 import { OrderTotals } from "@/components/cart/OrderTotals";
+import { PendingNotice } from "@/components/cart/PendingNotice";
+import { useSendOrder } from "@/components/cart/useSendOrder";
 import { Button } from "@/components/ui/Button";
 import { trackEvent } from "@/lib/analytics";
 import { formatCOP } from "@/lib/format";
@@ -14,17 +24,23 @@ import { MAX_QUANTITY } from "@/lib/validation";
 import { countItems, lineTotal, sumItems, useCart } from "@/store/cart";
 import type { CartItem } from "@/types/dish";
 
-export function CartDrawer({ deliveryFee }: { deliveryFee: number }) {
+type CartProps = {
+  deliveryFee: number;
+  /** Si se piden los datos del cliente antes de abrir WhatsApp. Ver /admin. */
+  checkoutForm: boolean;
+};
+
+export function CartDrawer({ deliveryFee, checkoutForm }: CartProps) {
   const isOpen = useCart((state) => state.isOpen);
 
   // El panel se monta solo mientras está abierto: así su estado interno
   // (el paso del checkout) arranca limpio en cada apertura sin resetearlo
   // desde un efecto.
   if (!isOpen) return null;
-  return <CartPanel deliveryFee={deliveryFee} />;
+  return <CartPanel deliveryFee={deliveryFee} checkoutForm={checkoutForm} />;
 }
 
-function CartPanel({ deliveryFee }: { deliveryFee: number }) {
+function CartPanel({ deliveryFee, checkoutForm }: CartProps) {
   const closeCart = useCart((state) => state.closeCart);
   const items = useCart((state) => state.items);
   const setQuantity = useCart((state) => state.setQuantity);
@@ -183,20 +199,24 @@ function CartPanel({ deliveryFee }: { deliveryFee: number }) {
 
             <footer className="border-t border-dark/10 bg-white p-5">
               <OrderTotals subtotal={subtotal} deliveryFee={deliveryFee} />
-              <Button
-                variant="whatsapp"
-                size="lg"
-                className="mt-4 w-full"
-                onClick={() => {
-                  trackEvent("checkout_iniciado", {
-                    total: subtotal + deliveryFee,
-                    items: countItems(items),
-                  });
-                  setRequestedStep("checkout");
-                }}
-              >
-                Continuar con el pedido
-              </Button>
+              {checkoutForm ? (
+                <Button
+                  variant="whatsapp"
+                  size="lg"
+                  className="mt-4 w-full"
+                  onClick={() => {
+                    trackEvent("checkout_iniciado", {
+                      total: subtotal + deliveryFee,
+                      items: countItems(items),
+                    });
+                    setRequestedStep("checkout");
+                  }}
+                >
+                  Continuar con el pedido
+                </Button>
+              ) : (
+                <QuickSend deliveryFee={deliveryFee} />
+              )}
             </footer>
           </>
         ) : (
@@ -207,6 +227,57 @@ function CartPanel({ deliveryFee }: { deliveryFee: number }) {
         )}
       </aside>
     </div>
+  );
+}
+
+/**
+ * Envío directo, sin formulario: es lo que ve el cliente cuando el dueño lo
+ * apaga desde /admin. Salen los platos y el total, y la dirección y el pago se
+ * cuadran en el chat.
+ *
+ * Es un componente aparte para que el hook del envío solo exista cuando hace
+ * falta; con el formulario encendido lo lleva `CheckoutForm`.
+ */
+function QuickSend({ deliveryFee }: { deliveryFee: number }) {
+  const { sending, pending, send, retry, dismiss } = useSendOrder(deliveryFee);
+
+  if (pending) {
+    return (
+      <PendingNotice
+        pending={pending}
+        sending={sending}
+        onRetry={retry}
+        onDismiss={dismiss}
+      />
+    );
+  }
+
+  return (
+    <>
+      <p className="mt-3 text-center text-xs text-dark/50">
+        Te abriremos WhatsApp con tu pedido; allí nos confirmas la dirección.
+      </p>
+      <Button
+        variant="whatsapp"
+        size="lg"
+        className="mt-3 w-full"
+        disabled={sending}
+        // Sin `await`: `send` tiene que abrir la pestaña dentro de este clic.
+        onClick={() => void send(null)}
+      >
+        {sending && <Loader2 size={18} className="animate-spin" />}
+        {/* Mismo recorte que el botón del formulario: en el teléfono el texto
+            completo se partía en dos líneas. */}
+        {sending ? (
+          "Enviando…"
+        ) : (
+          <span>
+            Enviar<span className="hidden sm:inline"> pedido</span> por
+            WhatsApp
+          </span>
+        )}
+      </Button>
+    </>
   );
 }
 

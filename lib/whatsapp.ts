@@ -62,15 +62,24 @@ export const DEFAULT_GREETING =
   "Hola, vi su publicidad en internet. ¿Aún tienen comida disponible para envío?";
 
 /**
+ * Cierre del mensaje cuando el pedido sale sin formulario: le deja claro al
+ * dueño que los datos de entrega todavía no llegaron y que van en el chat.
+ */
+const QUICK_ORDER_TAIL = "Les envío mi dirección y forma de pago por aquí.";
+
+/**
  * Arma el pedido completo. WhatsApp interpreta *texto* como negrita.
  *
  * El `code` es el que devuelve `saveOrder` al guardar el pedido en Supabase.
  * Es opcional a propósito: si la base falla, el mensaje sale igual (sin
  * código) antes que perder la venta.
+ *
+ * `customer` en null es un pedido con el formulario apagado desde el panel:
+ * salen los platos y el total, y los datos del cliente se piden en el chat.
  */
 export function buildOrderMessage(
   items: CartItem[],
-  customer: CustomerInfo,
+  customer: CustomerInfo | null,
   deliveryFee = 0,
   code?: string | null,
 ): string {
@@ -88,10 +97,14 @@ export function buildOrderMessage(
     "*NUEVO PEDIDO — El Mesón de Carmen*",
     ...(code ? [`*Pedido #${code}*`] : []),
     "",
-    `*Cliente:* ${customer.name}`,
-    `*Teléfono:* ${customer.phone}`,
-    `*Dirección:* ${customer.address}`,
-    "",
+    ...(customer
+      ? [
+          `*Cliente:* ${customer.name}`,
+          `*Teléfono:* ${customer.phone}`,
+          `*Dirección:* ${customer.address}`,
+          "",
+        ]
+      : []),
     "*Pedido:*",
     ...lines,
     "",
@@ -104,6 +117,11 @@ export function buildOrderMessage(
   }
   const total = subtotal + deliveryFee;
   parts.push(`*TOTAL: ${formatCOP(total)}*`);
+
+  if (!customer) {
+    parts.push("", QUICK_ORDER_TAIL);
+    return parts.join("\n");
+  }
 
   // Pago y notas cierran el mensaje, separados del total por una línea en
   // blanco. El pago no puede ir antes: el cambio se calcula sobre el total.
@@ -120,7 +138,7 @@ export function buildOrderMessage(
 /** URL final de wa.me con el pedido ya codificado. */
 export function buildOrderUrl(
   items: CartItem[],
-  customer: CustomerInfo,
+  customer: CustomerInfo | null,
   deliveryFee = 0,
   code?: string | null,
 ): string {

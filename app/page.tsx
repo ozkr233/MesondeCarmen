@@ -40,6 +40,7 @@ export default async function HomePage({ searchParams }: PageProps<"/">) {
       <Footer />
       <FloatingActions
         deliveryFee={settings.deliveryFee}
+        checkoutForm={settings.checkoutForm}
         deepLinkDish={deepLinkDish}
       />
     </>

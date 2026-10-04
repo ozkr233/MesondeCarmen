@@ -45,6 +45,7 @@ export default async function CartaPage({ searchParams }: PageProps<"/carta">) {
       <Footer />
       <FloatingActions
         deliveryFee={settings.deliveryFee}
+        checkoutForm={settings.checkoutForm}
         deepLinkDish={deepLinkDish}
       />
     </>

@@ -110,18 +110,29 @@ export async function getAllDishes(): Promise<{
   };
 }
 
-/** Ajustes del negocio. Si algo falla, el envío vale 0 y el pedido sigue. */
+/**
+ * Ajustes del negocio. Si algo falla, el envío vale 0, el formulario queda
+ * encendido y el pedido sigue.
+ *
+ * Se pide `*` y no la lista de columnas: `checkout_form` la añade
+ * 11_formulario_pedido.sql, y nombrarla en una base sin migrar haría fallar la
+ * consulta entera (42703) y el domicilio caería a 0 sin que nadie lo notara.
+ * Con `*` la columna simplemente no llega y el formulario sigue como estaba.
+ */
 export async function getSettings(): Promise<Settings> {
   const supabase = await createClient();
   const { data, error } = await supabase
     .from("settings")
-    .select("delivery_fee")
+    .select("*")
     .eq("id", 1)
     .maybeSingle();
 
   if (error) {
     console.error("[settings]:", error.message);
-    return { deliveryFee: 0 };
+    return { deliveryFee: 0, checkoutForm: true };
   }
-  return { deliveryFee: Number(data?.delivery_fee) || 0 };
+  return {
+    deliveryFee: Number(data?.delivery_fee) || 0,
+    checkoutForm: data?.checkout_form !== false,
+  };
 }

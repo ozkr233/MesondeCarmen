@@ -45,16 +45,25 @@ export type OrderLineInput = {
   portion: number | null;
 };
 
-export type OrderInput = {
-  items: OrderLineInput[];
-  /** El mismo que ya viaja en el mensaje de WhatsApp. Se valida, no se cree. */
-  code: string;
+/** Los datos del formulario del carrito, tal como los escribió el cliente. */
+export type OrderCustomerInput = {
   name: string;
   phone: string;
   address: string;
   notes: string;
   payment: string;
   cashBill: string;
+};
+
+export type OrderInput = {
+  items: OrderLineInput[];
+  /** El mismo que ya viaja en el mensaje de WhatsApp. Se valida, no se cree. */
+  code: string;
+  /**
+   * null cuando el pedido salió con el formulario apagado desde el panel. Que
+   * siga apagado lo comprueba `saveOrder` leyendo `settings`, no el navegador.
+   */
+  customer: OrderCustomerInput | null;
 };
 
 export type SaveOrderResult = {
@@ -69,9 +78,12 @@ function validate(input: OrderInput): string | null {
 
   // Las mismas reglas que ve el formulario, incluidas las longitudes. Sin esto
   // un campo largo pasaba de aquí y moría en el CHECK de Postgres, que solo
-  // sabe devolver un error genérico.
-  const invalid = Object.values(validateCustomer(input))[0];
-  if (invalid) return invalid;
+  // sabe devolver un error genérico. Un pedido sin datos se valida más abajo,
+  // cuando ya se sabe si el formulario está apagado.
+  if (input.customer) {
+    const invalid = Object.values(validateCustomer(input.customer))[0];
+    if (invalid) return invalid;
+  }
 
   for (const line of input.items) {
     if (!line.id) return "Hay un plato sin identificar en el pedido.";
@@ -107,11 +119,23 @@ export async function saveOrder(input: OrderInput): Promise<SaveOrderResult> {
   //
   // Los precios se releen de la base: el carrito vive en localStorage y llega
   // manipulable. Si no, las cifras del panel no significarían nada.
+  //
+  // Los ajustes van en paralelo: hacen falta para el domicilio y para saber si
+  // se acepta un pedido sin datos del cliente.
   const ids = [...new Set(input.items.map((line) => line.id))];
-  const { data: dishes, error: dishesError } = await supabase
-    .from("dishes")
-    .select("id, name, price, has_portions, portions")
-    .in("id", ids);
+  const [{ data: dishes, error: dishesError }, settings] = await Promise.all([
+    supabase
+      .from("dishes")
+      .select("id, name, price, has_portions, portions")
+      .in("id", ids),
+    getSettings(),
+  ]);
+
+  // Sin datos solo se registra mientras el formulario siga apagado. Si no,
+  // cualquiera podría saltarse el formulario llamando a la acción a mano.
+  if (!input.customer && settings.checkoutForm) {
+    return { code: null, error: "Faltan los datos del cliente." };
+  }
 
   if (dishesError) {
     console.error("[orders] platos:", dishesError.message);
@@ -162,7 +186,7 @@ export async function saveOrder(input: OrderInput): Promise<SaveOrderResult> {
     (total, line) => total + line.unit_price * line.quantity,
     0,
   );
-  const { deliveryFee } = await getSettings();
+  const { deliveryFee } = settings;
 
   // A partir de aquí se escribe, y escribir pedidos es privilegio del servidor.
   // Si falta la llave se registra y se devuelve error en vez de lanzar: el
@@ -181,20 +205,21 @@ export async function saveOrder(input: OrderInput): Promise<SaveOrderResult> {
 
   // Mismo recorte y misma normalización de teléfono que aplica el formulario,
   // por si el pedido llega por otro camino.
-  const customer = cleanCustomer(input);
+  const customer = input.customer ? cleanCustomer(input.customer) : null;
 
   const { error: orderError } = await admin.from("orders").insert({
     id,
     code: input.code,
-    customer_name: customer.name,
-    customer_phone: customer.phone,
-    customer_address: customer.address,
-    notes: customer.notes || null,
+    // Sin formulario, los datos del cliente quedan en null: están en el chat.
+    customer_name: customer?.name ?? null,
+    customer_phone: customer?.phone ?? null,
+    customer_address: customer?.address ?? null,
+    notes: customer?.notes || null,
     // `cleanCustomer` ya descartó cualquier valor fuera de las listas, así que
     // aquí solo puede llegar un método válido o nada. `cash_bill` en 0 es "paga
     // exacto"; null, que no aplica.
-    payment_method: customer.payment || null,
-    cash_bill: parseCashBill(customer),
+    payment_method: customer?.payment || null,
+    cash_bill: customer ? parseCashBill(customer) : null,
     subtotal,
     delivery_fee: deliveryFee,
   });

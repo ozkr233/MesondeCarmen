@@ -38,6 +38,11 @@ export type CartItem = {
 /** Ajustes del negocio editables desde /admin. */
 export type Settings = {
   deliveryFee: number;
+  /**
+   * Si el carrito pide los datos del cliente antes de abrir WhatsApp. Apagado,
+   * el pedido sale directo con los platos y el total.
+   */
+  checkoutForm: boolean;
 };
 
 /**
