@@ -181,6 +181,13 @@ La configuración está en [`wrangler.jsonc`](wrangler.jsonc) y
   `npm run preview` (el Worker en local, en <http://localhost:8787>) funcionan
   en Windows; si algún día fallan, usa WSL. `npm run dev` sigue siendo el
   de siempre.
+- **Después de cambiar dependencias, `npm run lock`.** Workers Builds instala
+  con `npm ci` y npm 10.9.2 (no se puede elegir la versión). Un `npm install`
+  con npm 11 en Windows borra del `package-lock.json` unas dependencias
+  opcionales de wasm (`@emnapi/core`, `@emnapi/runtime`), y npm 10 rechaza
+  entonces el lockfile ("Missing: @emnapi/… from lock file"). `npm run lock`
+  lo regenera con npm 10.9.2 sin tocar `node_modules`. Si se te olvida, el build
+  falla y producción se queda en la versión anterior: no se rompe nada.
 - **Logs.** Worker → **Observability**. Están activados en `wrangler.jsonc`.
 - **Sin ISR ni optimización de imágenes en el servidor.** La portada y la carta
   se renderizan en cada visita, y las fotos llegan ya comprimidas desde
