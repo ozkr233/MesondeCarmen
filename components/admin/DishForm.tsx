@@ -10,6 +10,7 @@ import { Input, Textarea } from "@/components/ui/Input";
 import { Modal } from "@/components/ui/Modal";
 import { Select } from "@/components/ui/Select";
 import { DEFAULT_CATEGORY } from "@/lib/categories";
+import { compressImage } from "@/lib/compress-image";
 import {
   MAX_PEOPLE,
   MAX_PORTIONS,
@@ -20,7 +21,11 @@ import { MENU_IMAGES_BUCKET as BUCKET } from "@/lib/storage";
 import { createClient } from "@/utils/supabase/client";
 import type { Dish } from "@/types/dish";
 
-const MAX_IMAGE_BYTES = 5 * 1024 * 1024;
+/**
+ * Límite del archivo que se elige, no del que se sube: antes de subirla la
+ * foto se achica a ~100 KB, y las de los celulares nuevos pasan de 5 MB.
+ */
+const MAX_IMAGE_BYTES = 15 * 1024 * 1024;
 
 /** Valor centinela del desplegable que abre el campo de categoría nueva. */
 const NEW_CATEGORY = "__nueva__";
@@ -168,7 +173,7 @@ function DishFormBody({
       return;
     }
     if (selected.size > MAX_IMAGE_BYTES) {
-      setError("La imagen no puede pesar más de 5 MB.");
+      setError("La imagen no puede pesar más de 15 MB.");
       event.target.value = "";
       return;
     }
@@ -227,20 +232,24 @@ function DishFormBody({
    *
    * Devuelve también la ruta dentro del bucket: si el guardado posterior falla,
    * es lo único que permite volver atrás y borrar el archivo recién subido.
+   *
+   * La caché es de un año porque un archivo nunca cambia: el nombre es un UUID
+   * nuevo en cada subida y `upsert` va apagado.
    */
   async function uploadImage(
     selected: File,
   ): Promise<{ path: string; publicUrl: string }> {
+    const optimized = await compressImage(selected);
     const supabase = createClient();
-    const extension = selected.name.split(".").pop()?.toLowerCase() || "jpg";
+    const extension = optimized.name.split(".").pop()?.toLowerCase() || "jpg";
     const path = `${crypto.randomUUID()}.${extension}`;
 
     const { error: uploadError } = await supabase.storage
       .from(BUCKET)
-      .upload(path, selected, {
-        cacheControl: "3600",
+      .upload(path, optimized, {
+        cacheControl: "31536000",
         upsert: false,
-        contentType: selected.type,
+        contentType: optimized.type,
       });
 
     if (uploadError) {
@@ -442,7 +451,7 @@ function DishFormBody({
             <span className="text-sm font-semibold">
               Haz clic para elegir una imagen
             </span>
-            <span className="text-xs">JPG o PNG, máximo 5 MB</span>
+            <span className="text-xs">JPG o PNG, máximo 15 MB</span>
           </label>
         )}
 

@@ -23,7 +23,14 @@ if (supabaseUrl) {
 }
 
 const nextConfig: NextConfig = {
-  images: { remotePatterns },
+  images: {
+    remotePatterns,
+    // Sin optimización de Vercel: cada ancho de cada foto contaba como una
+    // transformación y el plan Hobby se quedó sin cupo (las nuevas daban 402 y
+    // la carta salía sin fotos). Las fotos ya llegan optimizadas desde la
+    // subida (`lib/compress-image.ts`) y se sirven tal cual desde Supabase.
+    unoptimized: true,
+  },
   // Ancla la raíz al proyecto: si no, Turbopack encuentra un package-lock.json
   // suelto en el directorio del usuario y avisa en cada build.
   turbopack: { root: import.meta.dirname },

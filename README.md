@@ -175,7 +175,8 @@ supabase/10_orden_portada.sql  Actualización incremental: orden de los destacad
 supabase/11_formulario_pedido.sql Actualización incremental: formulario de pedido opcional
 lib/portions.ts                Porciones: precios por tamaño y precio de la carta
 assets/Logo.jpeg           Logo original del restaurante (fuente)
-public/logo.png            Logo con el fondo recortado, el que usa el sitio
+public/logo.png            Logo con el fondo recortado (512 px, el del JSON-LD)
+public/logo.webp           El mismo a 256 px, el que muestra el sitio
 app/icon.png               Favicon · app/opengraph-image.png  Vista previa al compartir
 Placeholder.html           Diseño original, conservado como referencia
 ```
@@ -216,6 +217,18 @@ Pendientes que no se resuelven desde el código:
 - **Las fotos se suben desde el navegador** al bucket `menu-images`: el cuerpo
   de una Server Action está limitado a ~1 MB y una foto de plato lo supera.
   Solo la URL pública viaja a la Server Action.
+- **Las fotos no pasan por la optimización de Vercel** (`images.unoptimized`
+  en [`next.config.ts`](next.config.ts)). Cada ancho de cada foto contaba como
+  una transformación, el cupo de Hobby se agotó y las fotos nuevas daban 402.
+  En su lugar se achican una sola vez, en el navegador, antes de subirlas
+  ([`lib/compress-image.ts`](lib/compress-image.ts): WebP, lado mayor de
+  1200 px, ~100 KB), y se sirven tal cual desde Supabase con caché de un año.
+  Las que se subieron antes de este cambio se recomprimen con:
+
+  ```bash
+  node --env-file=.env.local scripts/optimizar-imagenes.mts            # informe
+  node --env-file=.env.local scripts/optimizar-imagenes.mts --aplicar  # ejecutar
+  ```
 - **La seguridad real es RLS.** El proxy redirige, pero cada Server Action
   revalida la sesión por su cuenta porque el matcher del proxy no cubre de
   forma fiable las Server Actions.
