@@ -1,6 +1,12 @@
 import "server-only";
 
-import { normalizeOrder, type Order, type OrderStats } from "@/types/order";
+import { WHATSAPP_ORIGINS, type WhatsAppOrigin } from "@/lib/events";
+import {
+  normalizeOrder,
+  type FunnelStats,
+  type Order,
+  type OrderStats,
+} from "@/types/order";
 import { createClient } from "@/utils/supabase/server";
 
 /**
@@ -24,8 +30,8 @@ const WINDOW_DAYS = 30;
 /**
  * Medianoche de Colombia del día en curso, como instante UTC.
  *
- * Sin esto, en Vercel (que corre en UTC) los pedidos hechos después de las
- * 7 p.m. hora local contarían como del día siguiente y el "hoy" del panel
+ * Sin esto, en el servidor (que corre en UTC) los pedidos hechos después de
+ * las 7 p.m. hora local contarían como del día siguiente y el "hoy" del panel
  * saldría mal justo en las horas de más pedidos.
  */
 function startOfTodayCO(now: Date = new Date()): number {
@@ -123,6 +129,59 @@ export async function getOrderStats(): Promise<OrderStats> {
     .map(([name, quantity]) => ({ name, quantity }))
     .sort((a, b) => b.quantity - a.quantity || a.name.localeCompare(b.name, "es"))
     .slice(0, 5);
+
+  return stats;
+}
+
+/**
+ * Eventos del embudo de los últimos 30 días (`public.events`).
+ *
+ * El conteo lo hace Postgres (`event_counts`): un mes de clics pueden ser
+ * miles de filas, y aquí solo hacen falta los totales. La función respeta RLS,
+ * así que a quien no es admin le devuelve ceros.
+ */
+export async function getFunnelStats(): Promise<FunnelStats> {
+  const stats: FunnelStats = {
+    added: 0,
+    deeplinks: 0,
+    checkouts: 0,
+    sent: 0,
+    whatsapp: [],
+    whatsappTotal: 0,
+  };
+
+  const supabase = await createClient();
+  const since = startOfTodayCO() - (WINDOW_DAYS - 1) * DAY_MS;
+  const { data, error } = await supabase.rpc("event_counts", {
+    since: new Date(since).toISOString(),
+  });
+
+  if (error) {
+    console.error("[orders] embudo:", error.message);
+    return stats;
+  }
+
+  const rows =
+    (data as { name: string; origen: string | null; total: number }[] | null) ??
+    [];
+  const clicks = new Map<WhatsAppOrigin, number>();
+
+  for (const row of rows) {
+    const total = Number(row.total) || 0;
+    if (row.name === "carrito_agregado") stats.added += total;
+    else if (row.name === "carrito_deeplink") stats.deeplinks += total;
+    else if (row.name === "checkout_iniciado") stats.checkouts += total;
+    else if (row.name === "pedido_enviado") stats.sent += total;
+    else if (row.name === "whatsapp_click") {
+      stats.whatsappTotal += total;
+      const origin = WHATSAPP_ORIGINS.find((value) => value === row.origen);
+      if (origin) clicks.set(origin, (clicks.get(origin) ?? 0) + total);
+    }
+  }
+
+  stats.whatsapp = [...clicks]
+    .map(([origin, count]) => ({ origin, clicks: count }))
+    .sort((a, b) => b.clicks - a.clicks);
 
   return stats;
 }

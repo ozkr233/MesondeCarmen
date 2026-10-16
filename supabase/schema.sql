@@ -380,6 +380,67 @@ create policy "order_items_delete_admin"
 
 
 -- ----------------------------------------------------------------------------
+-- 7b. Eventos del embudo (la analítica propia; detalle en 12_eventos.sql)
+--     Los escribe `/api/events` con la llave secreta, como los pedidos: sin
+--     política de INSERT. Leerlos es solo para el dueño. No guardan nada del
+--     visitante, solo qué pasó y cuándo.
+-- ----------------------------------------------------------------------------
+create table if not exists public.events (
+  id         bigint generated always as identity primary key,
+  created_at timestamptz not null default now(),
+  name       text not null,
+  props      jsonb not null default '{}'::jsonb
+);
+
+alter table public.events drop constraint if exists events_name_valid;
+alter table public.events drop constraint if exists events_props_size;
+
+alter table public.events
+  add constraint events_name_valid
+    check (name in (
+      'carrito_agregado',
+      'carrito_deeplink',
+      'checkout_iniciado',
+      'pedido_enviado',
+      'whatsapp_click'
+    )),
+  add constraint events_props_size
+    check (pg_column_size(props) <= 1024);
+
+create index if not exists events_created_at_idx
+  on public.events (created_at desc);
+
+alter table public.events enable row level security;
+
+revoke insert, update, delete on public.events from anon, authenticated;
+
+drop policy if exists "events_select_admin" on public.events;
+
+create policy "events_select_admin"
+  on public.events for select
+  to authenticated
+  using (public.is_admin());
+
+-- `security invoker`: la política de arriba sigue mandando, así que a quien no
+-- es admin le devuelve cero filas.
+create or replace function public.event_counts(since timestamptz)
+returns table (name text, origen text, total bigint)
+language sql
+stable
+security invoker
+set search_path = ''
+as $$
+  select e.name, e.props ->> 'origen', count(*)
+  from public.events e
+  where e.created_at >= since
+  group by 1, 2
+$$;
+
+revoke execute on function public.event_counts(timestamptz) from public, anon;
+grant  execute on function public.event_counts(timestamptz) to authenticated;
+
+
+-- ----------------------------------------------------------------------------
 -- 8. Bucket de Storage para las fotos de los platos
 -- ----------------------------------------------------------------------------
 insert into storage.buckets (id, name, public)

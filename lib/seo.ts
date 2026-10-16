@@ -7,16 +7,14 @@ import type { Dish } from "@/types/dish";
  * URL pública del sitio, resuelta en un único lugar para que los metadatos,
  * el sitemap, el robots.txt y el JSON-LD no puedan discrepar entre sí.
  *
- * `site.url` es el dominio real; las dos variables de entorno solo existen
- * para que los deploys de preview de Vercel se anuncien a sí mismos en vez de
- * al dominio de producción.
+ * `site.url` es el dominio real. `NEXT_PUBLIC_SITE_URL` solo existe para
+ * cambiarlo sin tocar código; se inlina en el build, así que hay que definirla
+ * como variable de build, no de runtime.
  */
-export const siteUrl = (
-  process.env.NEXT_PUBLIC_SITE_URL ??
-  (process.env.VERCEL_ENV === "preview" && process.env.VERCEL_URL
-    ? `https://${process.env.VERCEL_URL}`
-    : site.url)
-).replace(/\/$/, "");
+export const siteUrl = (process.env.NEXT_PUBLIC_SITE_URL ?? site.url).replace(
+  /\/$/,
+  "",
+);
 
 /** Convierte una ruta interna ("/carta") en URL absoluta. */
 export function absoluteUrl(path = "/"): string {

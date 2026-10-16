@@ -18,7 +18,9 @@ export const config = {
      * - sitemap.xml y robots.txt: son públicos y no tienen sesión que
      *   refrescar; pasar por aquí era una consulta a Supabase por cada
      *   visita de un buscador.
+     * - api/events: los eventos del embudo no necesitan sesión, y pasar por
+     *   aquí costaría una llamada a Supabase Auth por cada clic.
      */
-    "/((?!_next/static|_next/image|favicon.ico|sitemap.xml|robots.txt|.*\\.(?:svg|png|jpg|jpeg|gif|webp|ico)$).*)",
+    "/((?!_next/static|_next/image|favicon.ico|sitemap.xml|robots.txt|api/events|.*\\.(?:svg|png|jpg|jpeg|gif|webp|ico)$).*)",
   ],
 };

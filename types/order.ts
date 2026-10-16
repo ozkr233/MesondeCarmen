@@ -16,6 +16,7 @@ export const ORDER_STATUSES = [
 
 export type OrderStatus = (typeof ORDER_STATUSES)[number];
 
+import type { WhatsAppOrigin } from "@/lib/events";
 import type { PaymentMethod } from "@/lib/validation";
 
 export type OrderItem = {
@@ -100,3 +101,23 @@ export function normalizeOrder(row: Order): Order {
     })),
   };
 }
+
+/**
+ * Eventos del embudo de los últimos 30 días, para `/admin/pedidos`.
+ *
+ * Cuentan clics, no visitantes: quien agrega tres platos suma tres en
+ * `added`. Por eso el panel no los divide entre sí para sacar porcentajes.
+ */
+export type FunnelStats = {
+  /** Platos agregados al carrito. */
+  added: number;
+  /** Platos que entraron solos al carrito desde un enlace compartido. */
+  deeplinks: number;
+  /** Veces que se abrió el formulario. Solo existe con el formulario encendido. */
+  checkouts: number;
+  /** Pedidos que salieron hacia WhatsApp, se hayan registrado o no. */
+  sent: number;
+  /** Clics a WhatsApp sin pedido, de más a menos por origen. */
+  whatsapp: { origin: WhatsAppOrigin; clicks: number }[];
+  whatsappTotal: number;
+};

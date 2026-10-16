@@ -4,7 +4,8 @@ Aplicación de pedidos para el restaurante **El Mesón de Carmen** (Riohacha, La
 Catálogo dinámico, carrito de compras con checkout por WhatsApp, registro de
 pedidos y panel de administración con subida de fotos y métricas.
 
-Next.js 16 (App Router) · React 19 · Tailwind CSS 4 · Supabase (Postgres, Storage y Auth) · Zustand
+Next.js 16 (App Router) · React 19 · Tailwind CSS 4 · Supabase (Postgres, Storage y Auth) · Zustand ·
+Cloudflare Workers (vía OpenNext)
 
 ---
 
@@ -19,6 +20,7 @@ En [supabase.com](https://supabase.com) crea un proyecto y luego, en
 - la tabla `dishes` con sus índices (incluye `is_featured`),
 - la tabla `settings` con el costo de domicilio,
 - las tablas `orders` y `order_items` con sus guardas,
+- la tabla `events` con los eventos del embudo, que alimenta `/admin/pedidos`,
 - las políticas RLS (lectura pública, escritura solo autenticados; los pedidos
   los puede crear cualquiera pero solo el dueño los lee),
 - el bucket público `menu-images` con sus políticas,
@@ -41,7 +43,9 @@ hayas puesto desde `/admin`.
 > [`10_orden_portada.sql`](supabase/10_orden_portada.sql) (orden de los
 > destacados) y
 > [`11_formulario_pedido.sql`](supabase/11_formulario_pedido.sql) (interruptor
-> del formulario de pedido).
+> del formulario de pedido) y
+> [`12_eventos.sql`](supabase/12_eventos.sql) (eventos del embudo, que
+> reemplazan a Vercel Analytics).
 > Todos los archivos son idempotentes: se pueden volver a ejecutar sin romper
 > nada.
 
@@ -64,9 +68,11 @@ Rellena en `.env.local`:
 | `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY` | Project Settings → API Keys → Publishable key (`sb_publishable_…`). Si tu proyecto todavía muestra la llave `anon`, sirve igual. |
 | `SUPABASE_SECRET_KEY` | Project Settings → API Keys → Secret keys (`sb_secret_…`). **Sin el prefijo `NEXT_PUBLIC_`**: se salta RLS y solo la usa el servidor para registrar pedidos. |
 | `NEXT_PUBLIC_WHATSAPP_NUMBER` | *Opcional.* Pisa el número de `lib/site.ts` para apuntar un preview a un teléfono de pruebas. Sin `+` ni espacios. |
+| `NEXT_PUBLIC_CF_BEACON_TOKEN` | *Opcional.* Token de Cloudflare Web Analytics (ver [Despliegue en Cloudflare](#despliegue-en-cloudflare)). Sin él no se carga el script. |
 
-> La llave secreta no va en git ni en el navegador. En Vercel se añade en
-> **Project Settings → Environment Variables**, sin marcarla como pública.
+> La llave secreta no va en git ni en el navegador. En producción va como
+> **Secret** del Worker de Cloudflare; ver
+> [Despliegue en Cloudflare](#despliegue-en-cloudflare).
 
 > **¿Cambió el teléfono del negocio?** No es una variable de entorno: se edita
 > `phoneDisplay` y `phoneE164` en [`lib/site.ts`](lib/site.ts) y se despliega.
@@ -85,15 +91,101 @@ npm run dev
 - Panel: <http://localhost:3000/admin>
 - Pedidos: <http://localhost:3000/admin/pedidos>
 
-### 5. Activar la analítica (solo en producción)
+### 5. Analítica
 
-El sitio está pensado para desplegarse en Vercel. Después del primer deploy, en
-el proyecto de Vercel entra a **Analytics → Enable** y a **Speed Insights →
-Enable**: sin ese paso los componentes que ya están en `app/layout.tsx` no
-reportan nada.
+Hay dos piezas, y ninguna envía nada en desarrollo:
 
-En desarrollo la analítica no envía datos — los eventos se escriben en la
-consola del navegador, que es justo lo que sirve para verificarlos en local.
+- **Visitas y Core Web Vitals**: Cloudflare Web Analytics. Solo se carga si
+  existe `NEXT_PUBLIC_CF_BEACON_TOKEN` (cómo sacarlo, en el paso 6 del
+  despliegue).
+- **Eventos del embudo** (agregar al carrito, abrir el formulario, enviar el
+  pedido, clics a WhatsApp): se guardan en la tabla `events` de Supabase y se
+  ven en `/admin/pedidos`. En `npm run dev` no se mandan: se escriben en la
+  consola del navegador, que es justo lo que sirve para verificarlos en local
+  sin ensuciar las cifras de producción.
+
+---
+
+## Despliegue en Cloudflare
+
+El sitio corre en **Cloudflare Workers** con el adaptador
+[OpenNext](https://opennext.js.org/cloudflare). Se compila con el
+`next build` de siempre, y `opennextjs-cloudflare` lo empaqueta como Worker.
+La configuración está en [`wrangler.jsonc`](wrangler.jsonc) y
+[`open-next.config.ts`](open-next.config.ts).
+
+### Primera vez
+
+1. **Base de datos.** Ejecuta [`supabase/12_eventos.sql`](supabase/12_eventos.sql)
+   en el SQL Editor (si instalaste desde cero con `schema.sql`, ya está).
+2. **Crear el Worker conectado a GitHub.** En Cloudflare, **Workers & Pages →
+   Create → Import a repository** y elige este repositorio:
+   - **Project name**: `meson-de-carmen`. Tiene que ser igual al `name` de
+     `wrangler.jsonc`.
+   - **Build command**: `npx opennextjs-cloudflare build`
+   - **Deploy command**: `npx opennextjs-cloudflare deploy`
+   - **Non-production branch deploy command**: `npx opennextjs-cloudflare upload`
+     (las otras ramas quedan como versiones de prueba con su propia URL, sin
+     tocar producción).
+3. **Variables de build** (Settings → Build → *Variables and secrets*). Las
+   `NEXT_PUBLIC_*` se copian dentro del código al compilar, así que tienen que
+   existir en el build:
+   - `NEXT_PUBLIC_SUPABASE_URL`
+   - `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY`
+   - `NEXT_PUBLIC_CF_BEACON_TOKEN` (opcional, paso 6)
+4. **Secret de runtime** (Settings → *Variables and Secrets* → Add → tipo
+   **Secret**): `SUPABASE_SECRET_KEY`. No la pongas como variable de build ni
+   con el prefijo `NEXT_PUBLIC_`. Como es un Secret, los deploys no la borran.
+5. **Probar** en `https://meson-de-carmen.<tu-subdominio>.workers.dev`: la carta
+   con fotos, el carrito, un pedido de prueba (tiene que aparecer en
+   `/admin/pedidos`), entrar a `/admin` y subir una foto. El `proxy.ts`, que
+   protege `/admin` y refresca la sesión, usa un soporte que OpenNext todavía
+   marca como experimental: si `/admin` no redirige al login o la sesión se
+   cae, **no muevas el dominio** todavía.
+6. **Web Analytics.** Cloudflare → **Analytics & Logs → Web Analytics → Add a
+   site** → `mesondecarmen.com`. Si te ofrece la instalación automática (pasa
+   cuando el dominio ya está en Cloudflare), puedes usarla y no poner el token.
+   Si no, copia el `token` del snippet, ponlo como `NEXT_PUBLIC_CF_BEACON_TOKEN`
+   en las variables de build y vuelve a desplegar. Usa una de las dos opciones,
+   no ambas, o cada visita contaría doble.
+7. **Dominio.**
+   - Si el DNS de `mesondecarmen.com` todavía no está en Cloudflare: **Add a
+     domain**, plan Free, y cambia los nameservers en el registrador donde
+     compraste el dominio (puede tardar unas horas).
+   - En el Worker: **Settings → Domains & Routes → Add → Custom domain** →
+     `mesondecarmen.com` y `www.mesondecarmen.com`. Si quedan registros `A` o
+     `CNAME` apuntando a Vercel, bórralos antes: Cloudflare no deja crear el
+     dominio encima de ellos.
+   - Opcional: **Rules → Redirect Rules**, con la plantilla de `www` al dominio
+     raíz, para que solo exista una versión del sitio.
+8. **Apagar Vercel**, cuando el dominio ya responda desde Cloudflare: quita el
+   dominio del proyecto y desconecta el repositorio (Settings → Git) o borra el
+   proyecto. Hasta entonces cada push se despliega en los dos sitios, y no pasa
+   nada.
+
+### A tener en cuenta
+
+- **Plan Free o Paid.** El plan Free de Workers permite un Worker de hasta
+  3 MiB comprimido, 10 ms de CPU por petición y 100.000 peticiones al día.
+  Este sitio pesa ~2,7 MiB comprimido (medido con
+  `npx wrangler deploy --dry-run`), así que cabe, pero con poco margen. Si el
+  deploy falla por tamaño, o en los logs del Worker aparecen errores `1102`
+  (CPU agotada), hace falta Workers Paid (USD 5 al mes: 10 MiB y hasta 30 s de
+  CPU).
+- **No despliegues desde tu PC** con `npm run deploy`. El build lee
+  `.env.local` y OpenNext copia esos valores, incluida la llave secreta, dentro
+  del código del Worker (`.open-next/cloudflare/next-env.mjs`). No llegan al
+  navegador, pero quedan en el código subido. Desde Workers Builds no existe
+  `.env.local` y la llave sale del Secret.
+- **Windows.** OpenNext no garantiza que funcione en Windows. Hoy el build y
+  `npm run preview` (el Worker en local, en <http://localhost:8787>) funcionan
+  en Windows; si algún día fallan, usa WSL. `npm run dev` sigue siendo el
+  de siempre.
+- **Logs.** Worker → **Observability**. Están activados en `wrangler.jsonc`.
+- **Sin ISR ni optimización de imágenes en el servidor.** La portada y la carta
+  se renderizan en cada visita, y las fotos llegan ya comprimidas desde
+  Supabase (ver Notas técnicas). Por eso no hacen falta ni R2 ni el binding
+  `IMAGES`.
 
 ---
 
@@ -115,10 +207,18 @@ manipulado en `localStorage` no puede ensuciar las cifras. Si Supabase falla o
 tarda más de 3 segundos, WhatsApp se abre igual y el pedido sale sin código:
 perder el registro es un problema, perder la venta es peor.
 
-El embudo completo se mide además como eventos en Vercel Analytics:
-`carrito_agregado` → `checkout_iniciado` → `pedido_enviado`. Los clics a los
-enlaces sueltos de WhatsApp (los que no llevan pedido armado) se registran
-aparte como `whatsapp_click`, con el `origen` que los distingue.
+El embudo completo se registra además como eventos en la tabla `events`
+(`carrito_agregado` → `checkout_iniciado` → `pedido_enviado`), y `/admin/pedidos`
+muestra los totales de los últimos 30 días. Los clics a los enlaces sueltos de
+WhatsApp (los que no llevan pedido armado) van aparte como `whatsapp_click`,
+con el `origen` que los distingue, y las llegadas por un enlace compartido de
+plato, como `carrito_deeplink`. Los eventos cuentan clics, no visitantes, y no
+guardan nada de quien los hace.
+
+Los manda `trackEvent` ([`lib/analytics.ts`](lib/analytics.ts)) con
+`sendBeacon` a [`/api/events`](app/api/events/route.ts), que valida cada uno
+con [`lib/events.ts`](lib/events.ts) y lo escribe con la llave secreta: igual
+que los pedidos, la tabla no acepta escrituras desde el navegador.
 
 ## Cómo se administra la carta
 
@@ -149,6 +249,7 @@ app/
   admin/(panel)/pedidos/   Listado de pedidos y métricas
   admin/actions.ts         Server Actions: crear, editar, borrar, interruptores, envío
   actions/orders.ts        Server Action pública que registra el pedido
+  api/events/route.ts      Recibe los eventos del embudo y los guarda en Supabase
   sitemap.ts               /sitemap.xml para Google
   robots.ts                /robots.txt (bloquea /admin, apunta al sitemap)
   admin/layout.tsx         Solo marca todo /admin como noindex
@@ -162,10 +263,14 @@ utils/supabase/            Clientes browser / server / proxy
 store/cart.ts              Carrito (Zustand + localStorage)
 lib/queries.ts             Consultas de lectura de platos y ajustes
 lib/orders.ts              Consultas de pedidos y estadísticas del panel
-lib/analytics.ts           Eventos del embudo (Vercel Analytics)
+lib/analytics.ts           trackEvent: manda los eventos del embudo a /api/events
+lib/events.ts              Qué eventos existen y cómo se validan
 lib/seo.ts                 URL pública y datos estructurados (JSON-LD)
 lib/                       Formato de precios, mensajes de WhatsApp, datos del negocio
 proxy.ts                   Protege /admin y refresca la sesión
+wrangler.jsonc             Worker de Cloudflare (nombre, flags, assets)
+open-next.config.ts        Adaptador OpenNext (caché de solo lectura, sin ISR)
+public/_headers            Caché larga para /_next/static en Cloudflare
 supabase/schema.sql        Instalación completa desde cero
 supabase/02_carta_y_envio.sql  Actualización incremental sobre la v1
 supabase/03_pedidos.sql        Actualización incremental: registro de pedidos
@@ -173,6 +278,7 @@ supabase/04_carta_completa.sql Carta real del restaurante (32 platos)
 supabase/09_porciones.sql      Actualización incremental: porciones y sus precios
 supabase/10_orden_portada.sql  Actualización incremental: orden de los destacados
 supabase/11_formulario_pedido.sql Actualización incremental: formulario de pedido opcional
+supabase/12_eventos.sql        Actualización incremental: eventos del embudo
 lib/portions.ts                Porciones: precios por tamaño y precio de la carta
 assets/Logo.jpeg           Logo original del restaurante (fuente)
 public/logo.png            Logo con el fondo recortado (512 px, el del JSON-LD)
@@ -239,7 +345,7 @@ Pendientes que no se resuelven desde el código:
   guardado responde. Va sin `noopener`: esa opción devuelve `null` y se
   perdería la referencia a la pestaña.
 - **Las horas del panel van fijas a `America/Bogota`.** El panel se renderiza
-  en el servidor (UTC en Vercel); sin fijar la zona, los pedidos hechos después
+  en el servidor (que corre en UTC); sin fijar la zona, los pedidos hechos después
   de las 7 p.m. contarían como del día siguiente.
 - **Las miniaturas del carrito se cargan con `loading="eager"`.** El panel se
   monta dentro de un overlay `fixed` al hacer clic; con el `lazy` que trae

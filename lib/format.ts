@@ -14,7 +14,7 @@ export function formatCOP(value: number): string {
 
 /**
  * Fecha y hora de un pedido, siempre en hora de Colombia. La zona va fija:
- * el panel se renderiza en el servidor (UTC en Vercel) y sin esto las horas
+ * el panel se renderiza en el servidor (que corre en UTC) y sin esto las horas
  * saldrían corridas cinco horas.
  */
 const coDateTime = new Intl.DateTimeFormat("es-CO", {

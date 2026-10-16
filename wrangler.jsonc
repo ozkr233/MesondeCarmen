@@ -1,0 +1,36 @@
+/**
+ * Worker de Cloudflare que sirve el sitio (vía @opennextjs/cloudflare).
+ *
+ * `main` y `assets` apuntan a lo que genera `opennextjs-cloudflare build`: no
+ * se tocan. No hay binding `IMAGES` porque las fotos no se optimizan en el
+ * servidor (ver `next.config.ts`), ni R2 porque no hay ISR (ver
+ * `open-next.config.ts`).
+ *
+ * Las variables NO van aquí: un `vars` en este archivo pisaría en cada deploy
+ * las del panel. Ver la sección "Despliegue en Cloudflare" del README.
+ */
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "meson-de-carmen",
+  "main": ".open-next/worker.js",
+  "compatibility_date": "2026-10-01",
+  "compatibility_flags": [
+    // Lo exige OpenNext, y también `proxy.ts`, que corre en runtime Node.
+    "nodejs_compat",
+    "global_fetch_strictly_public"
+  ],
+  "assets": {
+    "directory": ".open-next/assets",
+    "binding": "ASSETS"
+  },
+  "services": [
+    {
+      // Autorreferencia que usa OpenNext; el nombre tiene que ser el de arriba.
+      "binding": "WORKER_SELF_REFERENCE",
+      "service": "meson-de-carmen"
+    }
+  ],
+  "observability": {
+    "enabled": true
+  }
+}

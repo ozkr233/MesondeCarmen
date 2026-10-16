@@ -1,45 +1,42 @@
-import { track } from "@vercel/analytics";
+import type { Events } from "@/lib/events";
+
+export type { WhatsAppOrigin } from "@/lib/events";
 
 /**
- * Eventos del embudo, con los nombres en un solo sitio para que no se
- * dispersen strings sueltos por los componentes y el panel de Vercel no
- * termine con tres variantes del mismo evento.
+ * Manda un evento del embudo a `/api/events`, que lo guarda en Supabase para
+ * la tarjeta del embudo de `/admin/pedidos`. Los nombres y la forma de cada
+ * evento viven en `lib/events.ts`, para que no se dispersen strings sueltos por
+ * los componentes.
  *
- * En desarrollo `track` no envía nada: escribe el evento en la consola del
- * navegador, que es justo lo que sirve para verificar en local.
+ * `sendBeacon` y no un `fetch` normal: no bloquea nada, el navegador lo entrega
+ * aunque la pestaña navegue o se cierre, y no se encola detrás de la Server
+ * Action del pedido. Es fire-and-forget: si falla, se pierde un evento y nada
+ * más.
+ *
+ * En desarrollo no se manda nada: el evento se escribe en la consola del
+ * navegador, que es justo lo que sirve para verificar en local. Local y
+ * producción comparten la misma base de Supabase, y las pruebas ensuciarían
+ * las cifras del panel.
  */
 
-/** De dónde salió un clic a WhatsApp que no lleva pedido armado. */
-export type WhatsAppOrigin =
-  | "hero"
-  | "header"
-  | "fab"
-  | "carta"
-  | "ubicacion";
-
-type Events = {
-  /** El visitante agregó un plato al carrito. */
-  carrito_agregado: { plato: string };
-  /**
-   * Llegó por un enlace compartido (`/carta?plato=...`) y el plato entró solo
-   * al carrito. Separado de `carrito_agregado` para poder medir qué enlace
-   * compartido convierte.
-   */
-  carrito_deeplink: { plato: string };
-  /** Pasó del carrito al formulario de datos. */
-  checkout_iniciado: { total: number; items: number };
-  /**
-   * La conversión: el pedido salió de la página hacia WhatsApp. `code` viene
-   * null si Supabase falló y el pedido se envió sin quedar registrado.
-   */
-  pedido_enviado: { total: number; items: number; code: string | null };
-  /** Clic en uno de los enlaces de saludo, sin pedido de por medio. */
-  whatsapp_click: { origen: WhatsAppOrigin };
-};
+const ENDPOINT = "/api/events";
 
 export function trackEvent<K extends keyof Events>(
   name: K,
-  properties: Events[K],
+  props: Events[K],
 ): void {
-  track(name, properties);
+  if (process.env.NODE_ENV !== "production") {
+    console.info("[analytics]", name, props);
+    return;
+  }
+
+  const body = JSON.stringify({ name, props });
+
+  try {
+    if (navigator.sendBeacon?.(ENDPOINT, body)) return;
+  } catch {
+    // Algunos navegadores lanzan en vez de devolver false: se intenta con fetch.
+  }
+
+  fetch(ENDPOINT, { method: "POST", body, keepalive: true }).catch(() => {});
 }

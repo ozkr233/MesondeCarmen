@@ -1,7 +1,6 @@
-import { Analytics } from "@vercel/analytics/next";
-import { SpeedInsights } from "@vercel/speed-insights/next";
 import type { Metadata, Viewport } from "next";
 import { Montserrat, Playfair_Display } from "next/font/google";
+import Script from "next/script";
 
 import { siteUrl } from "@/lib/seo";
 import { site } from "@/lib/site";
@@ -21,6 +20,14 @@ const playfair = Playfair_Display({
   weight: ["700", "900"],
   display: "swap",
 });
+
+/**
+ * Token de Cloudflare Web Analytics (visitas y Core Web Vitals). Sin él no se
+ * carga el script, y así el desarrollo local no cuenta visitas. Es una
+ * variable de build: se inlina al compilar. Los eventos del embudo van aparte,
+ * a Supabase (`lib/analytics.ts`).
+ */
+const CF_BEACON_TOKEN = process.env.NEXT_PUBLIC_CF_BEACON_TOKEN;
 
 const TITLE = "El Mesón de Carmen | Pide tu Comida Guajira en Riohacha";
 const DESCRIPTION =
@@ -90,10 +97,13 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
     >
       <body className="font-sans min-h-full flex flex-col">
         {children}
-        {/* Analítica de Vercel: hay que activarla también en el panel del
-            proyecto (pestaña Analytics → Enable) o estos no reportan nada. */}
-        <Analytics />
-        <SpeedInsights />
+        {CF_BEACON_TOKEN && (
+          <Script
+            src="https://static.cloudflareinsights.com/beacon.min.js"
+            data-cf-beacon={JSON.stringify({ token: CF_BEACON_TOKEN })}
+            strategy="afterInteractive"
+          />
+        )}
       </body>
     </html>
   );
