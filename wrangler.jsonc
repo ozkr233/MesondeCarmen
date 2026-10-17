@@ -11,7 +11,7 @@
  */
 {
   "$schema": "node_modules/wrangler/config-schema.json",
-  "name": "meson-de-carmen",
+  "name": "mesondecarmen",
   "main": ".open-next/worker.js",
   "compatibility_date": "2026-10-01",
   "compatibility_flags": [
@@ -27,7 +27,7 @@
     {
       // Autorreferencia que usa OpenNext; el nombre tiene que ser el de arriba.
       "binding": "WORKER_SELF_REFERENCE",
-      "service": "meson-de-carmen"
+      "service": "mesondecarmen"
     }
   ],
   "observability": {

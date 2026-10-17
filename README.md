@@ -120,7 +120,7 @@ La configuración está en [`wrangler.jsonc`](wrangler.jsonc) y
    en el SQL Editor (si instalaste desde cero con `schema.sql`, ya está).
 2. **Crear el Worker conectado a GitHub.** En Cloudflare, **Workers & Pages →
    Create → Import a repository** y elige este repositorio:
-   - **Project name**: `meson-de-carmen`. Tiene que ser igual al `name` de
+   - **Project name**: `mesondecarmen`. Tiene que ser igual al `name` de
      `wrangler.jsonc`.
    - **Build command**: `npx opennextjs-cloudflare build`
    - **Deploy command**: `npx opennextjs-cloudflare deploy`
@@ -136,7 +136,7 @@ La configuración está en [`wrangler.jsonc`](wrangler.jsonc) y
 4. **Secret de runtime** (Settings → *Variables and Secrets* → Add → tipo
    **Secret**): `SUPABASE_SECRET_KEY`. No la pongas como variable de build ni
    con el prefijo `NEXT_PUBLIC_`. Como es un Secret, los deploys no la borran.
-5. **Probar** en `https://meson-de-carmen.<tu-subdominio>.workers.dev`: la carta
+5. **Probar** en `https://mesondecarmen.<tu-subdominio>.workers.dev`: la carta
    con fotos, el carrito, un pedido de prueba (tiene que aparecer en
    `/admin/pedidos`), entrar a `/admin` y subir una foto. El `proxy.ts`, que
    protege `/admin` y refresca la sesión, usa un soporte que OpenNext todavía
